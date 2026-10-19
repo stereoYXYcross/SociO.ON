@@ -1,0 +1,908 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SociON — 3D карта интертипных отношений</title>
+
+<style>
+:root{
+  --bg:#04060d;
+  --panel:rgba(8,12,24,.94);
+  --line:#24304e;
+  --text:#e9eeff;
+  --muted:#9dabc9;
+  --accent:#7dd3fc;
+  --alpha:#8b5cf6;
+  --beta:#ef4444;
+  --gamma:#22c55e;
+  --delta:#f59e0b;
+  --dual:#22c55e;
+  --conflict:#ef4444;
+  --order:#fbbf24;
+  --revision:#f97316;
+}
+
+*{box-sizing:border-box}
+
+html,body{
+  margin:0;
+  height:100%;
+  background:var(--bg);
+  color:var(--text);
+  font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
+  overflow:hidden;
+}
+
+#graph{
+  position:fixed;
+  inset:0;
+}
+
+.ui{
+  position:fixed;
+  z-index:20;
+}
+
+header{
+  top:0;
+  left:0;
+  right:0;
+  padding:16px 20px;
+  display:flex;
+  gap:16px;
+  align-items:flex-start;
+  justify-content:space-between;
+  pointer-events:none;
+}
+
+.brand{
+  pointer-events:auto;
+}
+
+.brand h1{
+  margin:0;
+  font-size:21px;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+}
+
+.brand p{
+  margin:4px 0 0;
+  color:var(--muted);
+  font-size:12px;
+  max-width:560px;
+}
+
+.controls{
+  pointer-events:auto;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  align-items:flex-end;
+}
+
+.row{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
+
+.chip{
+  border:1px solid var(--line);
+  background:var(--panel);
+  color:var(--text);
+  border-radius:999px;
+  padding:8px 13px;
+  font-size:12px;
+  cursor:pointer;
+  transition:.18s;
+}
+
+.chip:hover{
+  border-color:var(--accent);
+  color:var(--accent);
+}
+
+.chip.active{
+  background:var(--accent);
+  border-color:var(--accent);
+  color:#04121d;
+  font-weight:700;
+}
+
+#search{
+  pointer-events:auto;
+  width:250px;
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:999px;
+  padding:9px 14px;
+  color:var(--text);
+  font-size:13px;
+  outline:none;
+}
+
+#search:focus{
+  border-color:var(--accent);
+}
+
+#searchResults{
+  width:250px;
+  max-height:230px;
+  overflow:auto;
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:14px;
+  display:none;
+}
+
+#searchResults button{
+  display:block;
+  width:100%;
+  text-align:left;
+  background:none;
+  border:0;
+  color:var(--text);
+  padding:9px 13px;
+  font-size:13px;
+  cursor:pointer;
+}
+
+#searchResults button:hover{
+  background:rgba(125,211,252,.12);
+}
+
+#panel{
+  right:16px;
+  top:150px;
+  width:min(410px,calc(100vw - 32px));
+  max-height:calc(100vh - 190px);
+  overflow:auto;
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:18px;
+  padding:20px;
+  display:none;
+  backdrop-filter:blur(14px);
+}
+
+#panel.open{
+  display:block;
+}
+
+#panel h2{
+  margin:0;
+  font-size:23px;
+}
+
+#panel .kicker{
+  color:var(--accent);
+  font-size:11px;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  margin:0 0 8px;
+}
+
+#panel h3{
+  margin:18px 0 6px;
+  font-size:12px;
+  color:var(--muted);
+  letter-spacing:.12em;
+  text-transform:uppercase;
+}
+
+#panel p{
+  margin:0 0 10px;
+  font-size:14px;
+  line-height:1.55;
+  color:#cdd7ee;
+}
+
+.tag{
+  display:inline-block;
+  border:1px solid var(--line);
+  border-radius:8px;
+  padding:3px 8px;
+  margin:2px 4px 2px 0;
+  font-size:11px;
+  color:var(--muted);
+}
+
+#legend{
+  left:16px;
+  bottom:16px;
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:14px 16px;
+  font-size:11.5px;
+  color:var(--muted);
+  max-width:340px;
+}
+
+#legend div{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin:4px 0;
+}
+
+.dot{
+  width:10px;
+  height:10px;
+  border-radius:50%;
+  flex:0 0 auto;
+}
+
+.arrow{
+  width:16px;
+  height:2px;
+  background:var(--order);
+  position:relative;
+  flex:0 0 auto;
+}
+
+.arrow:after{
+  content:"";
+  position:absolute;
+  right:-1px;
+  top:-3px;
+  border-left:6px solid var(--order);
+  border-top:4px solid transparent;
+  border-bottom:4px solid transparent;
+}
+
+#hint{
+  left:16px;
+  top:150px;
+  color:var(--muted);
+  font-size:12px;
+  max-width:310px;
+}
+
+#close{
+  position:absolute;
+  right:12px;
+  top:10px;
+  border:0;
+  background:none;
+  color:var(--muted);
+  font-size:20px;
+  cursor:pointer;
+}
+
+#compareBar{
+  left:50%;
+  transform:translateX(-50%);
+  bottom:16px;
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:12px 16px;
+  display:none;
+  font-size:13px;
+  max-width:calc(100vw - 32px);
+}
+
+#compareBar.open{
+  display:block;
+}
+
+#compareBar b{
+  color:var(--accent);
+}
+
+@media(max-width:760px){
+  header{
+    flex-direction:column;
+    align-items:stretch;
+  }
+
+  .controls{
+    align-items:stretch;
+  }
+
+  .row{
+    justify-content:flex-start;
+  }
+
+  #search,
+  #searchResults{
+    width:100%;
+  }
+
+  #panel{
+    left:16px;
+    right:16px;
+    top:200px;
+    width:auto;
+  }
+
+  #hint,
+  #legend{
+    display:none;
+  }
+}
+</style>
+</head>
+<body>
+
+<div id="graph"></div>
+
+<header class="ui">
+  <div class="brand">
+    <h1>SociON</h1>
+    <p>
+      Интерактивная 3D-карта 16 соционических типов и 14 интертипных отношений.
+      Классическая соционика Аушры, модель А.
+    </p>
+  </div>
+
+  <div class="controls">
+    <input id="search" placeholder="Поиск типа: Дон Кихот, ИЛЭ…" autocomplete="off">
+    <div id="searchResults"></div>
+
+    <div class="row">
+      <button class="chip active" data-filter="all">Все квадры</button>
+      <button class="chip" data-filter="alpha">Альфа</button>
+      <button class="chip" data-filter="beta">Бета</button>
+      <button class="chip" data-filter="gamma">Гамма</button>
+      <button class="chip" data-filter="delta">Дельта</button>
+      <button class="chip" id="compareMode">Сравнение</button>
+      <button class="chip" id="reset">Сброс</button>
+    </div>
+  </div>
+</header>
+
+<div id="hint" class="ui">
+  Вращайте сцену мышью или пальцем, приближайте колесом / pinch.
+  Наведите на тип, чтобы подсветить его связи. Нажмите — откроется карточка.
+</div>
+
+<div id="panel" class="ui">
+  <button id="close">×</button>
+  <p class="kicker" id="pKicker"></p>
+  <h2 id="pTitle"></h2>
+  <div id="pTags"></div>
+
+  <h3>Описание типа</h3>
+  <p id="pDescription"></p>
+
+  <h3>Связи типа</h3>
+  <div id="pRelations"></div>
+</div>
+
+<div id="compareBar" class="ui"></div>
+
+<div id="legend" class="ui">
+  <div><span class="dot" style="background:var(--alpha)"></span>Альфа: ИЛЭ, СЭИ, ЭСЭ, ЛИИ</div>
+  <div><span class="dot" style="background:var(--beta)"></span>Бета: ЭИЭ, ЛСИ, СЛЭ, ИЭИ</div>
+  <div><span class="dot" style="background:var(--gamma)"></span>Гамма: СЭЭ, ИЛИ, ЛИЭ, ЭСИ</div>
+  <div><span class="dot" style="background:var(--delta)"></span>Дельта: ЛСЭ, ЭИИ, ИЭЭ, СЛИ</div>
+  <div><span class="dot" style="background:var(--dual)"></span>Дуальность</div>
+  <div><span class="dot" style="background:var(--conflict)"></span>Конфликт</div>
+  <div><span class="arrow"></span>Заказ / ревизия — направленная связь</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/3d-force-graph"></script>
+
+<script>
+const QUADRAS = {
+  alpha:{name:"Альфа",color:"#8b5cf6"},
+  beta:{name:"Бета",color:"#ef4444"},
+  gamma:{name:"Гамма",color:"#22c55e"},
+  delta:{name:"Дельта",color:"#f59e0b"}
+};
+
+const REL = {
+  identity:{
+    name:"Тождество",
+    symmetric:true,
+    color:"#64748b",
+    desc:"Отношения между представителями одного и того же типа. Похожие сильные и слабые стороны, общий ритм, но ограниченные возможности взаимного дополнения."
+  },
+  duality:{
+    name:"Дуальность",
+    symmetric:true,
+    color:"#22c55e",
+    desc:"Наиболее гармоничные отношения полного дополнения: сильные функции одного типа приходятся на слабые места другого. Естественное понимание и взаимная поддержка."
+  },
+  activation:{
+    name:"Активация",
+    symmetric:true,
+    color:"#38bdf8",
+    desc:"Энергичные, воодушевляющие отношения. Партнёры активируют друг друга, но при длительном тесном контакте возможна перевозбуждённость."
+  },
+  mirror:{
+    name:"Зеркальность",
+    symmetric:true,
+    color:"#a78bfa",
+    desc:"Похожий способ мышления и общие интересы, однако выводы и методы могут расходиться. Хорошие отношения для обмена идеями."
+  },
+  kindred:{
+    name:"Родственные",
+    symmetric:true,
+    color:"#60a5fa",
+    desc:"Партнёры понимают друг друга без долгих объяснений, имеют близкие ценности и интересы, но могут конкурировать в одной сфере."
+  },
+  semiDuality:{
+    name:"Полудуальность",
+    symmetric:true,
+    color:"#34d399",
+    desc:"Частичное дополнение и привлекательность, но без полной устойчивости дуальности: со временем могут проявляться различия в ритме и приоритетах."
+  },
+  business:{
+    name:"Деловые",
+    symmetric:true,
+    color:"#94a3b8",
+    desc:"Отношения сотрудничества и обмена опытом. Хорошо подходят для совместной работы, но эмоциональная близость развивается труднее."
+  },
+  mirage:{
+    name:"Миражные",
+    symmetric:true,
+    color:"#818cf8",
+    desc:"На первый взгляд лёгкие и приятные отношения, создающие иллюзию близости. При углублении контакта выявляются различия в понимании ситуаций."
+  },
+  superego:{
+    name:"Суперэго",
+    symmetric:true,
+    color:"#f472b6",
+    desc:"Взаимное восхищение сильными сторонами друг друга сочетается с напряжением: партнёры невольно задевают уязвимые места."
+  },
+  extinguishment:{
+    name:"Погашение",
+    symmetric:true,
+    color:"#c084fc",
+    desc:"Спокойные, нейтральные отношения. Партнёры могут гасить излишнюю активность друг друга, но им сложно полностью понять мотивы другого."
+  },
+  quasiIdentity:{
+    name:"Квазитождество",
+    symmetric:true,
+    color:"#fb7185",
+    desc:"Внешняя похожесть при глубоком различии подходов. Может возникать взаимное непонимание и ощущение, что партнёр «говорит на другом языке»."
+  },
+  conflict:{
+    name:"Конфликт",
+    symmetric:true,
+    color:"#ef4444",
+    desc:"Наиболее напряжённые отношения: партнёры непреднамеренно бьют по болевым точкам друг друга. Требуют дистанции и осознанных границ."
+  },
+  order:{
+    name:"Заказ",
+    symmetric:false,
+    color:"#fbbf24",
+    desc:"Направленные отношения: заказчик передаёт подзаказному информацию и задачи, которые тому трудно самостоятельно переработать. При конструктивном контакте даёт развитие."
+  },
+  revision:{
+    name:"Ревизия",
+    symmetric:false,
+    color:"#f97316",
+    desc:"Направленные отношения контроля: ревизор замечает слабые места подревизного и способен на него влиять. Без осознанности легко становятся давящими."
+  }
+};
+
+const TYPES = [
+  {id:"ILE",code:"ИЛЭ",name:"Дон Кихот",quadra:"alpha",desc:"Интуитивно-логический экстраверт. Генератор идей и возможностей, ищет новое, интересное и перспективное."},
+  {id:"SEI",code:"СЭИ",name:"Дюма",quadra:"alpha",desc:"Сенсорно-этический интроверт. Создаёт комфорт, умеет чувствовать людей и атмосферу, ценит уют и гармонию."},
+  {id:"ESE",code:"ЭСЭ",name:"Гюго",quadra:"alpha",desc:"Этико-сенсорный экстраверт. Эмоциональный организатор, умеет поднять настроение, объединить людей и позаботиться о быте."},
+  {id:"LII",code:"ЛИИ",name:"Робеспьер",quadra:"alpha",desc:"Логико-интуитивный интроверт. Аналитик и систематизатор, ищет ясные структуры, закономерности и объективную истину."},
+  {id:"EIE",code:"ЭИЭ",name:"Гамлет",quadra:"beta",desc:"Этико-интуитивный экстраверт. Эмоциональный лидер, чувствует настроения и перспективы, умеет вдохновлять и предупреждать об опасности."},
+  {id:"LSI",code:"ЛСИ",name:"Максим Горький",quadra:"beta",desc:"Логико-сенсорный интроверт. Строит порядок, правила и системы, ценит дисциплину, надёжность и защиту границ."},
+  {id:"SLE",code:"СЛЭ",name:"Жуков",quadra:"beta",desc:"Сенсорно-логический экстраверт. Стратег и организатор силы, видит ресурсы, умеет брать инициативу и достигать целей."},
+  {id:"IEI",code:"ИЭИ",name:"Есенин",quadra:"beta",desc:"Интуитивно-этический интроверт. Видит скрытые тенденции и настроение людей, создаёт образы, вдохновение и эмоциональную глубину."},
+  {id:"SEE",code:"СЭЭ",name:"Наполеон",quadra:"gamma",desc:"Сенсорно-этический экстраверт. Хозяин пространства, умеет влиять, расширять возможности и выстраивать полезные связи."},
+  {id:"ILI",code:"ИЛИ",name:"Бальзак",quadra:"gamma",desc:"Интуитивно-логический интроверт. Видит варианты развития событий, избегает бессмысленных затрат, ценит точность прогнозов."},
+  {id:"LIE",code:"ЛИЭ",name:"Джек Лондон",quadra:"gamma",desc:"Логико-интуитивный экстраверт. Предприниматель и технолог, ищет эффективные решения и новые возможности."},
+  {id:"ESI",code:"ЭСИ",name:"Драйзер",quadra:"gamma",desc:"Этико-сенсорный интроверт. Хранит личные ценности и отношения, тонко различает мораль, надёжность и искренность."},
+  {id:"LSE",code:"ЛСЭ",name:"Штирлиц",quadra:"delta",desc:"Логико-сенсорный экстраверт. Организатор процессов и быта, ценит работоспособность, порядок и практическую пользу."},
+  {id:"EII",code:"ЭИИ",name:"Достоевский",quadra:"delta",desc:"Этико-интуитивный интроверт. Понимает человеческие отношения и потенциал людей, стремится к нравственной ясности."},
+  {id:"IEE",code:"ИЭЭ",name:"Гексли",quadra:"delta",desc:"Интуитивно-этический экстраверт. Видит возможности и таланты людей, легко находит подход и раскрывает перспективы."},
+  {id:"SLI",code:"СЛИ",name:"Габен",quadra:"delta",desc:"Сенсорно-логический интроверт. Мастер комфорта и технологий, ценит удобство, качество, независимость и здравый смысл."}
+];
+
+const MATRIX = [
+["Т","Ду","Ак","Зе","Зак","Рев","Дел","Мир","Суп","Пог","Кв","Кон","Под","Подр","Род","Пд"],
+["Ду","Т","Зе","Ак","Рев","Зак","Мир","Дел","Пог","Суп","Кон","Кв","Подр","Под","Пд","Род"],
+["Ак","Зе","Т","Ду","Род","Пд","Под","Подр","Кв","Кон","Суп","Пог","Дел","Мир","Зак","Рев"],
+["Зе","Ак","Ду","Т","Пд","Род","Подр","Под","Кон","Кв","Пог","Суп","Мир","Дел","Рев","Зак"],
+["Под","Подр","Род","Пд","Т","Ду","Ак","Зе","Зак","Рев","Дел","Мир","Суп","Пог","Кв","Кон"],
+["Подр","Под","Пд","Род","Ду","Т","Зе","Ак","Рев","Зак","Мир","Дел","Пог","Суп","Кон","Кв"],
+["Дел","Мир","Зак","Рев","Ак","Зе","Т","Ду","Род","Пд","Под","Подр","Кв","Кон","Суп","Пог"],
+["Мир","Дел","Рев","Зак","Зе","Ак","Ду","Т","Пд","Род","Подр","Под","Кон","Кв","Пог","Суп"],
+["Суп","Пог","Кв","Кон","Под","Подр","Род","Пд","Т","Ду","Ак","Зе","Зак","Рев","Дел","Мир"],
+["Пог","Суп","Кон","Кв","Подр","Под","Пд","Род","Ду","Т","Зе","Ак","Рев","Зак","Мир","Дел"],
+["Кв","Кон","Суп","Пог","Дел","Мир","Зак","Рев","Ак","Зе","Т","Ду","Род","Пд","Под","Подр"],
+["Кон","Кв","Пог","Суп","Мир","Дел","Рев","Зак","Зе","Ак","Ду","Т","Пд","Род","Подр","Под"],
+["Зак","Рев","Дел","Мир","Суп","Пог","Кв","Кон","Под","Подр","Род","Пд","Т","Ду","Ак","Зе"],
+["Рев","Зак","Мир","Дел","Пог","Суп","Кон","Кв","Подр","Под","Пд","Род","Ду","Т","Зе","Ак"],
+["Род","Пд","Под","Подр","Кв","Кон","Суп","Пог","Дел","Мир","Зак","Рев","Ак","Зе","Т","Ду"],
+["Пд","Род","Подр","Под","Кон","Кв","Пог","Суп","Мир","Дел","Рев","Зак","Зе","Ак","Ду","Т"]
+];
+
+const CODE_TO_REL = {
+  "Т":"identity",
+  "Ду":"duality",
+  "Ак":"activation",
+  "Зе":"mirror",
+  "Род":"kindred",
+  "Пд":"semiDuality",
+  "Дел":"business",
+  "Мир":"mirage",
+  "Суп":"superego",
+  "Пог":"extinguishment",
+  "Кв":"quasiIdentity",
+  "Кон":"conflict",
+  "Зак":"order",
+  "Рев":"revision",
+  "Под":"order",
+  "Подр":"revision"
+};
+
+const nodes = TYPES.map((type,index)=>{
+  const quadra=QUADRAS[type.quadra];
+  const ringIndex=["alpha","beta","gamma","delta"].indexOf(type.quadra);
+  const angle=((index%4)/4)*Math.PI*2+ringIndex*Math.PI/2;
+  const radius=110;
+
+  return {
+    ...type,
+    color:quadra.color,
+    val:1,
+    fx:Math.cos(angle)*radius,
+    fy:(ringIndex-1.5)*80,
+    fz:Math.sin(angle)*radius
+  };
+});
+
+const links=[];
+
+for(let i=0;i<16;i++){
+  for(let j=0;j<16;j++){
+    if(i===j) continue;
+
+    const code=MATRIX[i][j];
+
+    if(code==="Зак"||code==="Рев"){
+      links.push({
+        source:nodes[i].id,
+        target:nodes[j].id,
+        rel:CODE_TO_REL[code],
+        directed:true,
+        roleFrom:code==="Зак"?"заказчик":"ревизор",
+        roleTo:code==="Зак"?"подзаказный":"подревизный"
+      });
+    }
+  }
+}
+
+const symmetricCodes=[
+  "Т","Ду","Ак","Зе","Род","Пд","Дел","Мир","Суп","Пог","Кв","Кон"
+];
+
+for(let i=0;i<16;i++){
+  for(let j=i+1;j<16;j++){
+    const code=MATRIX[i][j];
+
+    if(!symmetricCodes.includes(code)) continue;
+
+    links.push({
+      source:nodes[i].id,
+      target:nodes[j].id,
+      rel:CODE_TO_REL[code],
+      directed:false
+    });
+  }
+}
+
+let highlighted=null;
+let selectedForCompare=[];
+
+const graph=ForceGraph3D(document.getElementById("graph"))
+  .backgroundColor("#04060d")
+  .showNavInfo(false)
+  .nodeLabel(node=>`${node.name} · ${node.code}`)
+  .nodeColor(node=>node.color)
+  .nodeRelSize(7)
+  .linkColor(link=>REL[link.rel].color)
+  .linkWidth(link=>{
+    if(highlighted){
+      return isConnected(link)?1.8:.08;
+    }
+
+    return link.rel==="duality"?1.5:.55;
+  })
+  .linkOpacity(link=>{
+    if(highlighted){
+      return isConnected(link)?.95:.06;
+    }
+
+    return .65;
+  })
+  .linkDirectionalParticles(link=>link.directed?4:0)
+  .linkDirectionalParticleWidth(link=>link.directed?2.4:0)
+  .linkDirectionalParticleColor(link=>REL[link.rel].color)
+  .linkDirectionalArrowLength(link=>link.directed?7:0)
+  .linkDirectionalArrowRelPos(1)
+  .linkDirectionalArrowColor(link=>REL[link.rel].color)
+  .onNodeClick(handleNodeClick)
+  .onLinkClick(openLink)
+  .graphData({nodes,links});
+
+graph.d3Force("charge").strength(-220);
+graph.d3Force("link").distance(105);
+
+function isConnected(link){
+  return link.source.id===highlighted||link.target.id===highlighted;
+}
+
+graph.onNodeHover(node=>{
+  highlighted=node?node.id:null;
+
+  graph.linkWidth(link=>{
+    if(highlighted){
+      return isConnected(link)?1.8:.08;
+    }
+
+    return link.rel==="duality"?1.5:.55;
+  });
+
+  graph.linkOpacity(link=>{
+    if(highlighted){
+      return isConnected(link)?.95:.06;
+    }
+
+    return .65;
+  });
+
+  graph.nodeColor(node=>{
+    if(!highlighted) return node.color;
+
+    const connected=links.some(link=>
+      (link.source.id===highlighted&&link.target.id===node.id)||
+      (link.target.id===highlighted&&link.source.id===node.id)
+    );
+
+    return node.id===highlighted||connected
+      ? node.color
+      : "rgba(120,130,160,.18)";
+  });
+});
+
+function relationBetween(firstId,secondId){
+  const firstIndex=TYPES.findIndex(type=>type.id===firstId);
+  const secondIndex=TYPES.findIndex(type=>type.id===secondId);
+
+  const code=MATRIX[firstIndex][secondIndex];
+  const rel=CODE_TO_REL[code];
+
+  let direction="";
+
+  if(code==="Зак"){
+    direction=`${TYPES[firstIndex].name} — заказчик, ${TYPES[secondIndex].name} — подзаказный.`;
+  }
+
+  if(code==="Рев"){
+    direction=`${TYPES[firstIndex].name} — ревизор, ${TYPES[secondIndex].name} — подревизный.`;
+  }
+
+  if(code==="Под"){
+    direction=`${TYPES[secondIndex].name} — заказчик, ${TYPES[firstIndex].name} — подзаказный.`;
+  }
+
+  if(code==="Подр"){
+    direction=`${TYPES[secondIndex].name} — ревизор, ${TYPES[firstIndex].name} — подревизный.`;
+  }
+
+  return {code,rel,direction};
+}
+
+function handleNodeClick(node){
+  const compareActive=document
+    .getElementById("compareMode")
+    .classList.contains("active");
+
+  if(compareActive){
+    handleCompareClick(node);
+    return;
+  }
+
+  openType(node);
+}
+
+function openType(node){
+  const quadra=QUADRAS[node.quadra];
+
+  document.getElementById("panel").classList.add("open");
+  document.getElementById("pKicker").textContent=`Квадра ${quadra.name}`;
+  document.getElementById("pTitle").textContent=`${node.name} · ${node.code}`;
+  document.getElementById("pTags").innerHTML=
+    `<span class="tag">${quadra.name}</span>`+
+    `<span class="tag">${node.code}</span>`;
+
+  document.getElementById("pDescription").textContent=node.desc;
+
+  const items=[];
+
+  TYPES.forEach(other=>{
+    if(other.id===node.id) return;
+
+    const relation=relationBetween(node.id,other.id);
+
+    items.push(
+      `<div class="tag" style="border-color:${REL[relation.rel].color};color:${REL[relation.rel].color}">
+        ${REL[relation.rel].name}: ${other.name}
+      </div>`
+    );
+  });
+
+  document.getElementById("pRelations").innerHTML=items.join("");
+  focusNode(node);
+}
+
+function openLink(link){
+  const first=typeof link.source==="object"
+    ? link.source
+    : nodes.find(node=>node.id===link.source);
+
+  const second=typeof link.target==="object"
+    ? link.target
+    : nodes.find(node=>node.id===link.target);
+
+  const relation=relationBetween(first.id,second.id);
+
+  document.getElementById("panel").classList.add("open");
+  document.getElementById("pKicker").textContent="Интертипное отношение";
+  document.getElementById("pTitle").textContent=REL[relation.rel].name;
+
+  document.getElementById("pTags").innerHTML=
+    `<span class="tag" style="border-color:${REL[relation.rel].color};color:${REL[relation.rel].color}">${first.name}</span>`+
+    `<span class="tag" style="border-color:${REL[relation.rel].color};color:${REL[relation.rel].color}">${second.name}</span>`;
+
+  document.getElementById("pDescription").textContent=REL[relation.rel].desc;
+
+  document.getElementById("pRelations").innerHTML=relation.direction
+    ? `<p>${relation.direction}</p>`
+    : "<p>Симметричное отношение: оба партнёра находятся в равной позиции.</p>";
+}
+
+function handleCompareClick(node){
+  if(!selectedForCompare.includes(node.id)){
+    selectedForCompare.push(node.id);
+  }
+
+  if(selectedForCompare.length>2){
+    selectedForCompare=[node.id];
+  }
+
+  if(selectedForCompare.length===2){
+    const firstId=selectedForCompare[0];
+    const secondId=selectedForCompare[1];
+
+    const relation=relationBetween(firstId,secondId);
+
+    const firstName=TYPES.find(type=>type.id===firstId).name;
+    const secondName=TYPES.find(type=>type.id===secondId).name;
+
+    document.getElementById("compareBar").innerHTML=
+      `<b>${firstName}</b> ↔ <b>${secondName}</b>: ${REL[relation.rel].name}. `+
+      `${relation.direction} ${REL[relation.rel].desc}`;
+
+    document.getElementById("compareBar").classList.add("open");
+  }
+}
+
+function focusNode(node){
+  const distance=180;
+  const ratio=distance/Math.hypot(node.x,node.y,node.z);
+
+  graph.cameraPosition(
+    {
+      x:node.x*ratio,
+      y:node.y*ratio,
+      z:node.z*ratio
+    },
+    node,
+    900
+  );
+}
+
+const searchInput=document.getElementById("search");
+const resultsBox=document.getElementById("searchResults");
+
+searchInput.addEventListener("input",()=>{
+  const query=searchInput.value.trim().toLowerCase();
+
+  if(!query){
+    resultsBox.style.display="none";
+    return;
+  }
+
+  const matches=TYPES.filter(type=>
+    type.name.toLowerCase().includes(query)||
+    type.code.toLowerCase().includes(query)
+  ).slice(0,8);
+
+  resultsBox.innerHTML=matches.map(type=>
+    `<button data-id="${type.id}">${type.name} · ${type.code}</button>`
+  ).join("");
+
+  resultsBox.style.display=matches.length?"block":"none";
+});
+
+resultsBox.addEventListener("click",event=>{
+  const button=event.target.closest("button");
+
+  if(!button) return;
+
+  const node=nodes.find(item=>item.id===button.dataset.id);
+
+  searchInput.value="";
+  resultsBox.style.display="none";
+
+  openType(node);
+});
+
+document.addEventListener("click",event=>{
+  if(
+    !event.target.closest("#search")&&
+    !event.target.closest("#searchResults")
+  ){
+    resultsBox.style.display="none";
+  }
+});
+
+document.querySelectorAll(".chip[data-filter]").forEach(button=>{
+  button.onclick=()=>{
+    document.querySelectorAll(".chip[data-filter]").forEach(item=>{
+      item.classList.remove("active");
+    });
+
+    button.classList.add("active");
+
+    const filter=button.dataset.filter;
+
+    graph.nodeVisibility(node=>filter==="all"||node.quadra===filter);
+    graph.refresh();
+  };
+});
+
+document.getElementById("compareMode").onclick=function(){
+  this.classList.toggle("active");
+
+  if(!this.classList.contains("active")){
+    selectedForCompare=[];
+    document.getElementById("compareBar").classList.remove("open");
+  }
+};
+
+document.getElementById("reset").onclick=()=>{
+  selectedForCompare=[];
+  document.getElementById("compareBar").classList.remove("open");
+
+  document.querySelectorAll(".chip[data-filter]").forEach(item=>{
+    item.classList.remove("active");
+  });
+
+  document.querySelector('[data-filter="all"]').classList.add("active");
+
+  graph.nodeVisibility(()=>true);
+  graph.refresh();
+  graph.zoomToFit(800,80);
+};
+
+graph.onBackgroundClick(()=>{
+  const compareActive=document
+    .getElementById("compareMode")
+    .classList.contains("active");
+
+  if(compareActive){
+    selectedForCompare=[];
+    document.getElementById("compareBar").classList.remove("open");
+  }
+});
+</script>
+
+</body>
+</html>
