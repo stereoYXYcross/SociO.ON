@@ -1,0 +1,1960 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SociON — 3D карта интертипных отношений</title>
+
+<style>
+:root{
+  --bg:#03040b;
+  --panel:rgba(5,8,20,.76);
+  --line:rgba(130,160,255,.26);
+  --text:#f1f2ff;
+  --muted:#a7b2d4;
+  --accent:#b6a0ff;
+  --alpha:#a99bff;
+  --beta:#f08aa8;
+  --gamma:#55d6bd;
+  --delta:#e8bd78;
+  --dual:#22c55e;
+  --conflict:#ef4444;
+  --order:#fbbf24;
+  --revision:#f97316;
+}
+
+*{box-sizing:border-box}
+
+html,body{
+  margin:0;
+  height:100%;
+  background:radial-gradient(ellipse at 50% 45%,#10102b 0%,#070918 45%,#020309 100%);
+  color:var(--text);
+  font-family:"SF Pro Text Light","SF Pro Text","SF Pro Display",-apple-system,BlinkMacSystemFont,system-ui,"Segoe UI",sans-serif;
+  font-weight:300;
+  overflow:hidden;
+}
+
+#graph{
+  position:fixed;
+  inset:0;
+  width:100vw;
+  height:100vh;
+  min-width:320px;
+  min-height:320px;
+  overflow:hidden;
+}
+#graph canvas{
+  display:block;width:100%;height:100%;
+  /* Свечение рисуется цветом самих узлов и связей, а не белым фильтром поверх всей сцены. */
+  filter:none;
+  animation:none;
+}
+/* Живое звёздное поле поверх фона, но не перехватывает управление сценой. */
+#space-dust{position:fixed;inset:0;z-index:2;pointer-events:none;opacity:.68;background-image:radial-gradient(1px 1px at 7% 18%,#fff 99%,transparent),radial-gradient(1px 1px at 23% 76%,#a9baff 99%,transparent),radial-gradient(1.5px 1.5px at 81% 27%,#f4c8ff 99%,transparent),radial-gradient(1px 1px at 68% 83%,#fff 99%,transparent),radial-gradient(1px 1px at 45% 9%,#c4d7ff 99%,transparent),radial-gradient(1px 1px at 91% 67%,#fff 99%,transparent),radial-gradient(1px 1px at 13% 61%,#dce7ff 99%,transparent),radial-gradient(1.4px 1.4px at 34% 35%,#fff 99%,transparent),radial-gradient(1px 1px at 58% 72%,#b7c8ff 99%,transparent),radial-gradient(1px 1px at 76% 11%,#fff 99%,transparent),radial-gradient(1.2px 1.2px at 94% 44%,#e8c9ff 99%,transparent),radial-gradient(1px 1px at 4% 91%,#fff 99%,transparent),radial-gradient(2px 2px at 39% 84%,#fff 99%,transparent),radial-gradient(1px 1px at 62% 20%,#c4d7ff 99%,transparent),radial-gradient(1px 1px at 87% 90%,#fff 99%,transparent),radial-gradient(1px 1px at 18% 6%,#f4c8ff 99%,transparent);background-size:290px 240px;animation:cosmicDrift 45s linear infinite;}
+#nebula{position:fixed;inset:-15%;z-index:1;pointer-events:none;background:radial-gradient(ellipse at 23% 34%,rgba(86,49,180,.16),transparent 36%),radial-gradient(ellipse at 72% 65%,rgba(25,102,155,.13),transparent 38%),radial-gradient(ellipse at 54% 48%,rgba(178,53,126,.08),transparent 32%);animation:nebulaFloat 28s ease-in-out infinite alternate;}
+@keyframes cosmicDrift{from{transform:translate3d(0,0,0)}to{transform:translate3d(-120px,70px,0)}}
+@keyframes nebulaFloat{from{transform:translate3d(-1%,0,0) scale(1)}to{transform:translate3d(1%,1%,0) scale(1.06)}}
+@media(prefers-reduced-motion:reduce){#space-dust,#nebula{animation:none}}
+
+.ui{
+  position:fixed;
+  z-index:20;
+}
+
+header{
+  top:0;
+  left:0;
+  right:0;
+  padding:16px 20px;
+  display:flex;
+  gap:16px;
+  align-items:flex-start;
+  justify-content:space-between;
+  pointer-events:none;
+}
+
+.brand{
+  pointer-events:auto;
+}
+
+.brand h1{
+  margin:0;
+  font-size:21px;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+}
+
+.brand p{
+  margin:4px 0 0;
+  color:var(--muted);
+  font-size:12px;
+  max-width:560px;
+}
+
+.controls{
+  pointer-events:auto;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  align-items:flex-end;
+}
+
+.row{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
+
+.chip{
+  border:1px solid var(--line);
+  background:linear-gradient(135deg,rgba(13,17,39,.82),rgba(5,7,18,.78));
+  box-shadow:0 0 18px rgba(91,104,255,.08),inset 0 0 18px rgba(135,150,255,.025);
+  color:var(--text);
+  border-radius:999px;
+  padding:8px 13px;
+  font-size:12px;
+  cursor:pointer;
+  transition:.18s;
+}
+
+.chip:hover{
+  border-color:var(--accent);
+  color:var(--accent);
+}
+
+.chip.active{
+  background:var(--accent);
+  border-color:var(--accent);
+  color:#04121d;
+  font-weight:700;
+}
+
+#search{
+  pointer-events:auto;
+  width:250px;
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:999px;
+  padding:9px 14px;
+  color:var(--text);
+  font-size:13px;
+  outline:none;
+}
+
+#search:focus{
+  border-color:var(--accent);
+}
+
+#searchResults{
+  width:250px;
+  max-height:230px;
+  overflow:auto;
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:14px;
+  display:none;
+}
+
+#searchResults button{
+  display:block;
+  width:100%;
+  text-align:left;
+  background:none;
+  border:0;
+  color:var(--text);
+  padding:9px 13px;
+  font-size:13px;
+  cursor:pointer;
+}
+
+#searchResults button:hover{
+  background:rgba(125,211,252,.12);
+}
+
+#panel{
+  right:16px;
+  top:150px;
+  width:min(410px,calc(100vw - 32px));
+  max-height:calc(100vh - 190px);
+  overflow:auto;
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:18px;
+  padding:20px;
+  display:none;
+  backdrop-filter:blur(14px);
+}
+
+#panel.open{
+  display:block;
+}
+
+#panel h2{
+  margin:0;
+  font-size:23px;
+}
+
+#panel .kicker{
+  color:var(--accent);
+  font-size:11px;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  margin:0 0 8px;
+}
+
+#panel h3{
+  margin:18px 0 6px;
+  font-size:12px;
+  color:var(--muted);
+  letter-spacing:.12em;
+  text-transform:uppercase;
+}
+
+#panel p{
+  margin:0 0 10px;
+  font-size:14px;
+  line-height:1.55;
+  color:#cdd7ee;
+}
+
+.relation-nav-list{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.relation-nav-item{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;padding:8px 10px;border:1px solid rgba(150,160,210,.2);border-radius:9px;background:rgba(255,255,255,.025);color:#dce2fa;text-align:left;cursor:pointer;font:inherit;font-size:12px;transition:background .16s,border-color .16s,transform .16s}
+.relation-nav-item:hover,.relation-nav-item:focus-visible{background:rgba(150,140,255,.10);border-color:var(--rel-color);outline:none;transform:translateX(2px)}
+.relation-nav-item .rel-name{color:var(--rel-color);font-weight:600}
+.relation-nav-item .rel-target{color:#f1f2ff}
+.relation-nav-item .rel-arrow{color:var(--rel-color);font-size:16px;flex:0 0 auto}
+.nav-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.nav-action{border:1px solid rgba(180,170,255,.32);background:rgba(150,130,255,.08);color:#e9e5ff;border-radius:8px;padding:6px 9px;cursor:pointer;font:inherit;font-size:11px}
+.nav-action:hover{background:rgba(150,130,255,.17)}
+
+.tag{
+  display:inline-block;
+  border:1px solid var(--line);
+  border-radius:8px;
+  padding:3px 8px;
+  margin:2px 4px 2px 0;
+  font-size:11px;
+  color:var(--muted);
+}
+
+#legend{
+  left:16px;
+  bottom:16px;
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:14px 16px;
+  font-size:11.5px;
+  color:var(--muted);
+  max-width:340px;
+}
+
+#legend div{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin:4px 0;
+}
+
+.dot{
+  width:10px;
+  height:10px;
+  border-radius:50%;
+  flex:0 0 auto;
+}
+
+.arrow{
+  width:16px;
+  height:2px;
+  background:var(--order);
+  position:relative;
+  flex:0 0 auto;
+}
+
+.arrow:after{
+  content:"";
+  position:absolute;
+  right:-1px;
+  top:-3px;
+  border-left:6px solid var(--order);
+  border-top:4px solid transparent;
+  border-bottom:4px solid transparent;
+}
+
+
+#relationFilters{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px;max-height:126px;overflow:auto;padding-right:3px}
+.relation-filter{display:inline-flex;align-items:center;gap:5px;border:1px solid rgba(150,160,210,.22);background:rgba(8,12,28,.62);color:var(--muted);border-radius:999px;padding:5px 7px;font:inherit;font-size:10.5px;cursor:pointer;transition:background .18s,border-color .18s,color .18s}
+.relation-filter .dot{width:7px;height:7px}
+.relation-filter.active{color:#f1f2ff;border-color:var(--rel-color);background:color-mix(in srgb,var(--rel-color) 16%,rgba(8,12,28,.8));box-shadow:0 0 8px color-mix(in srgb,var(--rel-color) 22%,transparent)}
+.relation-filter:focus-visible{outline:1px solid var(--rel-color);outline-offset:2px}
+.legend-caption{margin:10px 0 4px;color:#e3e5ff;font-size:10px;text-transform:uppercase;letter-spacing:.12em}
+
+#hint{
+  left:16px;
+  top:150px;
+  color:var(--muted);
+  font-size:12px;
+  max-width:310px;
+}
+
+#close{
+  position:absolute;
+  right:12px;
+  top:10px;
+  border:0;
+  background:none;
+  color:var(--muted);
+  font-size:20px;
+  cursor:pointer;
+}
+
+#routeBar{position:fixed;right:16px;bottom:16px;width:min(390px,calc(100vw - 32px));max-height:38vh;overflow:auto;padding:14px;border:1px solid rgba(160,145,255,.28);border-radius:14px;background:rgba(7,9,22,.92);backdrop-filter:blur(14px);display:none;z-index:21;color:#e5e7ff;font-size:12px;box-shadow:0 12px 44px #0008}
+#routeBar.open{display:block}
+.route-row{display:flex;gap:8px;align-items:center;margin:8px 0}
+.route-row select{flex:1;min-width:0;background:#111429;color:#e8eaff;border:1px solid #454568;border-radius:7px;padding:7px}
+.route-step{padding:7px 9px;border-left:2px solid var(--route-color,#a78bfa);margin:5px 0;background:#ffffff08;border-radius:0 7px 7px 0}
+#compareBar{
+  left:auto; right:16px; transform:none; bottom:16px;
+  width:min(680px,calc(100vw - 32px)); max-height:38vh; overflow:auto;
+  background:rgba(5,8,20,.90); border:1px solid rgba(180,170,255,.30);
+  border-radius:16px; padding:14px 16px; display:none; font-size:12px;
+  line-height:1.5; box-shadow:0 0 26px rgba(130,100,255,.14); backdrop-filter:blur(16px);
+}
+#compareBar.open{display:block}
+/* В режиме сравнения освобождаем нижний левый угол от легенды. */
+body.compare-active #legend{display:none}
+body.compare-active #routeBar{position:fixed;right:16px;bottom:16px;width:min(390px,calc(100vw - 32px));max-height:38vh;overflow:auto;padding:14px;border:1px solid rgba(160,145,255,.28);border-radius:14px;background:rgba(7,9,22,.92);backdrop-filter:blur(14px);display:none;z-index:21;color:#e5e7ff;font-size:12px;box-shadow:0 12px 44px #0008}
+#routeBar.open{display:block}
+.route-row{display:flex;gap:8px;align-items:center;margin:8px 0}
+.route-row select{flex:1;min-width:0;background:#111429;color:#e8eaff;border:1px solid #454568;border-radius:7px;padding:7px}
+.route-step{padding:7px 9px;border-left:2px solid var(--route-color,#a78bfa);margin:5px 0;background:#ffffff08;border-radius:0 7px 7px 0}
+#compareBar{z-index:20}
+body.compare-active #panel{max-height:42vh}
+#compareBar b{color:var(--accent)}
+.compare-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:9px}
+.compare-head strong{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#c9c3ff}
+.compare-clear{border:1px solid rgba(190,190,230,.25);background:rgba(255,255,255,.04);color:#d9dcf7;border-radius:8px;padding:4px 8px;cursor:pointer;font:inherit}
+.compare-columns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.compare-type{border:1px solid rgba(160,160,210,.2);border-radius:10px;padding:9px 10px;background:rgba(255,255,255,.025);min-width:0}
+.compare-type h4{margin:0 0 5px;font-size:13px;color:#f0efff}
+.compare-type p{margin:0;color:#b9c4e0;font-size:11px;line-height:1.45}
+.compare-relation{margin-top:10px;padding:9px 10px;border-radius:10px;background:rgba(140,120,255,.08);border:1px solid rgba(160,140,255,.22);color:#e2e4ff}
+.compare-hint{color:var(--muted);font-size:11px}
+
+@media(max-width:760px){
+  header{
+    flex-direction:column;
+    align-items:stretch;
+  }
+
+  .controls{
+    align-items:stretch;
+  }
+
+  .row{
+    justify-content:flex-start;
+  }
+
+  #search,
+  #searchResults{
+    width:100%;
+  }
+
+  #panel{
+    left:16px;
+    right:16px;
+    top:200px;
+    width:auto;
+  }
+
+  #hint,
+  #legend{display:none}
+  #routeBar{position:fixed;right:16px;bottom:16px;width:min(390px,calc(100vw - 32px));max-height:38vh;overflow:auto;padding:14px;border:1px solid rgba(160,145,255,.28);border-radius:14px;background:rgba(7,9,22,.92);backdrop-filter:blur(14px);display:none;z-index:21;color:#e5e7ff;font-size:12px;box-shadow:0 12px 44px #0008}
+#routeBar.open{display:block}
+.route-row{display:flex;gap:8px;align-items:center;margin:8px 0}
+.route-row select{flex:1;min-width:0;background:#111429;color:#e8eaff;border:1px solid #454568;border-radius:7px;padding:7px}
+.route-step{padding:7px 9px;border-left:2px solid var(--route-color,#a78bfa);margin:5px 0;background:#ffffff08;border-radius:0 7px 7px 0}
+#compareBar{left:12px;right:12px;bottom:10px;width:auto;max-height:34vh;padding:10px}
+  .compare-columns{grid-template-columns:1fr 1fr;gap:6px}
+  .compare-type{padding:7px}
+}
+
+.profile-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:10px}
+.profile-stat{padding:9px 10px;border-radius:9px;background:rgba(140,120,255,.075);border:1px solid rgba(160,140,255,.16);min-width:0}
+.profile-stat strong{display:block;font-size:15px;color:#eeeaff;line-height:1.2}
+.profile-stat span{display:block;color:#aeb8d8;font-size:10px;line-height:1.35;margin-top:3px}
+.profile-details{margin-top:9px;border-top:1px solid rgba(160,160,210,.15);padding-top:8px}
+.profile-details summary{cursor:pointer;color:#d9d5ff;font-weight:600;font-size:11px}
+.profile-list{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px}
+.profile-row{display:flex;align-items:center;justify-content:space-between;gap:7px;padding:5px 7px;border-radius:6px;background:#ffffff05;font-size:10px;color:#c5cbe4;min-width:0}
+.profile-row>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.profile-pair{display:flex;align-items:center;gap:5px;white-space:nowrap}
+.profile-pair i{font-style:normal}
+.profile-pair b{color:#9ca3af;font-size:12px}
+@media(max-width:600px){.profile-summary{grid-template-columns:repeat(3,minmax(0,1fr))}.profile-stat{padding:7px}.profile-stat strong{font-size:13px}.profile-list{grid-template-columns:1fr}}
+
+
+#workspacePanel{left:16px;top:145px;width:250px;padding:12px 13px;border:1px solid rgba(160,150,255,.25);border-radius:14px;background:rgba(5,8,20,.86);backdrop-filter:blur(14px);box-shadow:0 10px 32px #0005;color:#e9eaff;font-size:12px;z-index:22}
+.workspace-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}.workspace-head strong{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#d8d0ff}.workspace-head button,.workspace-foot button{border:1px solid rgba(190,190,230,.25);background:#ffffff08;color:#d9dcf7;border-radius:7px;padding:3px 8px;cursor:pointer;font:inherit}
+.setting-row{display:block;margin:11px 0}.setting-row>span{display:flex;justify-content:space-between;gap:8px;margin-bottom:6px;color:#cbd2ef}.setting-row output{color:#d3c7ff;font-variant-numeric:tabular-nums}.setting-row input{width:100%;accent-color:#b6a0ff;cursor:pointer}.workspace-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:8px;border-top:1px solid #ffffff15;color:#8f9abf;font-size:10px}.workspace-foot button{white-space:nowrap;font-size:10px}
+#workspacePanel.collapsed{width:auto;padding:8px 10px}#workspacePanel.collapsed .workspace-head{margin:0}#workspacePanel.collapsed #workspaceBody{display:none}
+@media(max-width:760px){#workspacePanel{top:auto;left:10px;bottom:10px;width:min(250px,calc(100vw - 20px));max-height:45vh;overflow:auto}#workspacePanel.collapsed{bottom:10px}}
+
+
+/* SociON v35 — Liquid Glass UI layer */
+:root{
+  --panel:rgba(15,19,39,.54);
+  --line:rgba(208,218,255,.20);
+  --text:#f4f5ff;
+  --muted:#aeb9d8;
+  --accent:#c5b8ff;
+  --glass-edge:rgba(228,233,255,.24);
+  --glass-shadow:0 18px 55px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.12);
+}
+body{
+  background:radial-gradient(ellipse at 50% 42%,#151735 0%,#080b19 48%,#03040b 100%);
+}
+.ui, #routeBar, #compareBar, #workspacePanel{
+  -webkit-backdrop-filter:blur(20px) saturate(145%);
+  backdrop-filter:blur(20px) saturate(145%);
+}
+.brand{
+  padding:13px 17px 14px;
+  border:1px solid rgba(220,226,255,.13);
+  border-radius:22px;
+  background:linear-gradient(135deg,rgba(255,255,255,.105),rgba(255,255,255,.025) 48%,rgba(120,130,255,.045));
+  box-shadow:var(--glass-shadow);
+  position:relative;overflow:hidden;
+}
+.brand:before, #panel:before, #legend:before, #compareBar:before, #routeBar:before, #workspacePanel:before{
+  content:"";position:absolute;inset:0;pointer-events:none;border-radius:inherit;
+  background:linear-gradient(125deg,rgba(255,255,255,.10),transparent 24%,transparent 72%,rgba(175,164,255,.055));
+}
+.brand h1{font-size:20px;letter-spacing:.19em;text-shadow:0 0 24px rgba(170,155,255,.22)}
+.brand p{font-size:11px;letter-spacing:.015em;color:#b4bedb}
+.controls{gap:9px}
+.chip, #search, #searchResults, .nav-action, .compare-clear, .relation-nav-item, .relation-filter{
+  border-color:rgba(210,220,255,.17);
+  background:linear-gradient(135deg,rgba(255,255,255,.085),rgba(255,255,255,.025));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 5px 18px rgba(0,0,0,.12);
+  -webkit-backdrop-filter:blur(16px) saturate(135%);
+  backdrop-filter:blur(16px) saturate(135%);
+}
+.chip{padding:9px 14px;font-weight:550;letter-spacing:.01em;transition:background .2s,border-color .2s,box-shadow .2s,transform .2s}
+.chip:hover{border-color:rgba(201,190,255,.65);color:#e6e0ff;background:rgba(180,165,255,.13);box-shadow:0 0 0 1px rgba(190,175,255,.08),0 7px 24px rgba(89,73,180,.14);transform:translateY(-1px)}
+.chip.active{color:#17132b;background:linear-gradient(135deg,#e1d9ff,#aaa0ff);border-color:rgba(255,255,255,.65);box-shadow:0 0 24px rgba(172,151,255,.22),inset 0 1px 0 rgba(255,255,255,.8)}
+#search{background:rgba(255,255,255,.055);border-radius:14px;padding:11px 15px;box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 8px 22px rgba(0,0,0,.12)}
+#search::placeholder{color:#8995b8}
+#search:focus{border-color:rgba(198,185,255,.72);box-shadow:0 0 0 3px rgba(173,155,255,.10),0 8px 24px rgba(0,0,0,.16)}
+#searchResults{border-radius:16px;overflow:hidden;background:rgba(13,17,35,.82);box-shadow:var(--glass-shadow)}
+#searchResults button:hover{background:rgba(185,173,255,.13)}
+#panel, #legend, #routeBar, #compareBar, #workspacePanel{
+  position:relative;
+  border:1px solid var(--glass-edge);
+  background:linear-gradient(145deg,rgba(29,34,62,.72),rgba(9,12,27,.70) 55%,rgba(21,19,45,.66));
+  box-shadow:0 22px 70px rgba(0,0,0,.34),inset 0 1px 0 rgba(255,255,255,.13),inset 0 0 35px rgba(165,153,255,.035);
+  border-radius:22px;
+  isolation:isolate;
+}
+#panel{padding:23px;backdrop-filter:blur(24px) saturate(150%)}
+#panel h2{letter-spacing:-.025em}
+#panel .kicker{letter-spacing:.18em;color:#c6baff}
+#panel h3,.legend-caption{color:#c0c8e5;letter-spacing:.14em}
+#panel p{color:#d3daf0}
+#close{width:32px;height:32px;right:10px;top:10px;border-radius:50%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.10);transition:.18s}
+#close:hover{color:white;background:rgba(255,255,255,.14);transform:rotate(90deg)}
+#legend{padding:16px 18px;backdrop-filter:blur(22px) saturate(145%)}
+#legend > *{position:relative}
+#hint{padding:10px 13px;border:1px solid rgba(210,220,255,.11);border-radius:14px;background:rgba(11,15,31,.35);backdrop-filter:blur(12px);color:#bdc7e3}
+.relation-nav-item{border-radius:12px;padding:10px 12px;background:rgba(255,255,255,.035)}
+.relation-nav-item:hover,.relation-nav-item:focus-visible{background:rgba(175,160,255,.12);box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.nav-action,.compare-clear{border-radius:11px;padding:8px 11px;transition:background .18s,border-color .18s}
+.nav-action:hover,.compare-clear:hover{background:rgba(190,177,255,.15);border-color:rgba(210,200,255,.45)}
+.tag{border-radius:999px;background:rgba(255,255,255,.045);border-color:rgba(220,225,255,.16)}
+#relationFilters{scrollbar-width:thin;scrollbar-color:rgba(180,170,255,.4) transparent}
+.relation-filter{padding:6px 9px;background:rgba(255,255,255,.035)}
+.relation-filter.active{background:color-mix(in srgb,var(--rel-color) 18%,rgba(16,18,38,.78));box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 0 14px color-mix(in srgb,var(--rel-color) 18%,transparent)}
+#routeBar,#compareBar{padding:17px 18px;backdrop-filter:blur(24px) saturate(150%)}
+#routeBar select,.route-row select{background:rgba(255,255,255,.07);border:1px solid rgba(215,220,255,.19);border-radius:10px;color:#f0f1ff;padding:9px}
+.route-step{background:rgba(255,255,255,.045);border-radius:0 11px 11px 0;padding:9px 11px}
+.compare-type{border-color:rgba(220,225,255,.14);border-radius:14px;background:rgba(255,255,255,.04)}
+.compare-relation{border-radius:13px;background:rgba(173,154,255,.09);border-color:rgba(194,180,255,.2)}
+#workspacePanel{border-radius:20px!important;background:linear-gradient(145deg,rgba(29,34,62,.76),rgba(9,12,27,.76))!important;border-color:rgba(220,226,255,.22)!important;box-shadow:var(--glass-shadow)!important}
+button, input, select{font-family:inherit}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid rgba(205,194,255,.8);outline-offset:2px}
+@media(max-width:760px){
+  header{padding:10px;gap:8px}
+  .brand{padding:10px 13px;border-radius:17px}
+  .brand h1{font-size:17px}
+  .brand p{font-size:10px}
+  .controls{gap:6px}
+  .row{gap:6px}
+  .chip{padding:8px 11px;font-size:11px}
+  #panel{left:10px;right:10px;top:200px;width:auto;padding:18px;border-radius:19px;max-height:calc(100vh - 220px)}
+  #routeBar,#compareBar{left:10px;right:10px;bottom:10px;width:auto;max-height:40vh;border-radius:18px}
+  #workspacePanel{border-radius:17px!important}
+}
+@media(prefers-reduced-transparency:reduce){
+  #panel,#legend,#routeBar,#compareBar,#workspacePanel,.brand,.chip,#search,#searchResults{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgba(10,13,29,.94)}
+}
+
+
+/* SociON v36 — Liquid Glass correction: restore anchored panels */
+#panel, #legend, #routeBar, #compareBar, #workspacePanel{
+  position:fixed !important;
+  background:linear-gradient(135deg,rgba(24,29,54,.34),rgba(9,13,29,.28) 52%,rgba(31,25,59,.30)) !important;
+  border-color:rgba(218,226,255,.17) !important;
+  box-shadow:0 16px 48px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.16),inset 0 0 22px rgba(171,158,255,.035) !important;
+  -webkit-backdrop-filter:blur(22px) saturate(175%);
+  backdrop-filter:blur(22px) saturate(175%);
+}
+#panel{right:16px;left:auto;top:150px;width:min(410px,calc(100vw - 32px));}
+#legend{left:16px;right:auto;top:auto;bottom:16px;width:auto;max-width:340px;}
+#workspacePanel{
+  left:16px !important;right:auto !important;top:auto !important;bottom:16px !important;
+  width:250px !important;max-width:calc(100vw - 32px);
+}
+#workspacePanel.collapsed{width:max-content !important;max-width:calc(100vw - 32px);}
+#routeBar{right:16px;left:auto;top:auto;bottom:16px;width:min(390px,calc(100vw - 32px));}
+#compareBar{right:16px;left:auto;top:auto;bottom:16px;transform:none;width:min(680px,calc(100vw - 32px));}
+body.compare-active #workspacePanel{bottom:16px !important;}
+/* Liquid highlights: lighter surfaces, soft specular sheen and subtle inner refraction */
+.brand, #panel, #legend, #routeBar, #compareBar, #workspacePanel{
+  overflow:hidden;
+}
+.brand:before, #panel:before, #legend:before, #compareBar:before, #routeBar:before, #workspacePanel:before{
+  background:
+    radial-gradient(ellipse at 12% 0%,rgba(255,255,255,.13),transparent 42%),
+    linear-gradient(118deg,rgba(255,255,255,.065),transparent 28%,transparent 70%,rgba(177,165,255,.055)) !important;
+  border:1px solid rgba(255,255,255,.045);
+}
+.chip, #search, #searchResults, .nav-action, .compare-clear, .relation-nav-item, .relation-filter{
+  background:linear-gradient(135deg,rgba(255,255,255,.075),rgba(255,255,255,.018)) !important;
+  border-color:rgba(215,225,255,.15);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.085),0 4px 15px rgba(0,0,0,.09);
+}
+.chip.active{
+  background:linear-gradient(135deg,rgba(230,222,255,.88),rgba(169,157,255,.78)) !important;
+}
+#workspacePanel{z-index:22}
+#legend{z-index:20}
+@media(max-width:760px){
+  #panel{left:10px !important;right:10px !important;top:200px !important;bottom:auto !important;width:auto !important;max-height:calc(100vh - 220px);}
+  #legend{display:none}
+  #workspacePanel{left:10px !important;right:auto !important;top:auto !important;bottom:10px !important;width:min(250px,calc(100vw - 20px)) !important;max-height:45vh;overflow:auto;}
+  #workspacePanel.collapsed{bottom:10px !important;width:max-content !important;}
+  #routeBar,#compareBar{left:10px !important;right:10px !important;bottom:10px !important;top:auto !important;width:auto !important;max-height:40vh;}
+}
+
+
+/* SociON v37 — layout and interactive relation controls */
+#workspacePanel{
+  position:fixed !important;
+  left:16px !important; right:auto !important;
+  top:145px !important; bottom:auto !important;
+  width:250px !important; max-width:calc(100vw - 32px);
+  z-index:24 !important;
+}
+#workspacePanel.collapsed{width:max-content !important;max-width:calc(100vw - 32px);}
+#legend{z-index:25 !important;}
+#legend > *, #relationFilters, #relationFilters .relation-filter{
+  position:relative;
+  pointer-events:auto !important;
+}
+#relationFilters{
+  display:flex; flex-wrap:wrap; gap:6px;
+  max-height:190px !important; overflow-y:auto;
+  padding:4px 3px 5px 0;
+}
+#relationFilters .relation-filter{
+  display:inline-flex; align-items:center; gap:6px;
+  cursor:pointer; user-select:none;
+  color:#edf0ff; border:1px solid rgba(215,225,255,.18);
+  border-radius:999px; padding:7px 10px;
+  background:linear-gradient(135deg,rgba(255,255,255,.085),rgba(255,255,255,.025)) !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.09),0 4px 12px rgba(0,0,0,.10);
+  transition:background .18s,border-color .18s,box-shadow .18s,transform .18s;
+}
+#relationFilters .relation-filter:hover{border-color:rgba(220,211,255,.55);transform:translateY(-1px);}
+#relationFilters .relation-filter.active{
+  border-color:color-mix(in srgb,var(--rel-color) 65%,white 10%);
+  background:linear-gradient(135deg,color-mix(in srgb,var(--rel-color) 27%,rgba(20,22,44,.78)),rgba(255,255,255,.045)) !important;
+  box-shadow:0 0 16px color-mix(in srgb,var(--rel-color) 22%,transparent),inset 0 1px 0 rgba(255,255,255,.13);
+}
+#routeBar select, .route-row select, #routeRelationSelect{
+  color-scheme:dark;
+  color:#f2f2ff !important;
+  background:linear-gradient(135deg,rgba(42,47,78,.58),rgba(14,18,39,.48)) !important;
+  border:1px solid rgba(220,226,255,.22) !important;
+  border-radius:12px !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 8px 22px rgba(0,0,0,.12);
+  -webkit-backdrop-filter:blur(22px) saturate(180%);
+  backdrop-filter:blur(22px) saturate(180%);
+}
+#routeRelationSelect option{background:#171a32;color:#f2f2ff;}
+#routeBar, #routeBar *{accent-color:#bdb0ff;}
+@media(max-width:760px){
+  #workspacePanel{left:10px !important;right:auto !important;top:145px !important;bottom:auto !important;width:min(250px,calc(100vw - 20px)) !important;max-height:42vh;overflow:auto;}
+  #workspacePanel.collapsed{top:145px !important;bottom:auto !important;width:max-content !important;}
+  #relationFilters{max-height:150px !important;}
+}
+
+
+
+/* SociON v38 — stable workspace geometry, gentle panel motion and seamless cosmic loop */
+#workspacePanel{
+  position:fixed!important;left:16px!important;right:auto!important;top:145px!important;bottom:auto!important;
+  width:270px!important;height:auto!important;min-height:0!important;max-height:calc(100vh - 165px)!important;
+  display:block!important;align-self:auto!important;flex:none!important;box-sizing:border-box!important;
+  overflow:hidden!important;transform-origin:top left;transition:width .34s cubic-bezier(.22,.8,.25,1),
+  padding .34s cubic-bezier(.22,.8,.25,1),border-radius .34s ease,background .3s ease,box-shadow .3s ease;
+  z-index:30!important;
+}
+#workspacePanel.collapsed{width:max-content!important;height:auto!important;min-height:0!important;max-height:none!important;padding:8px 10px!important;}
+#workspacePanel .workspace-head{margin-bottom:0;min-height:28px;}
+#workspacePanel #workspaceCollapse{width:28px;height:28px;display:grid;place-items:center;padding:0;border-radius:50%;font-size:20px;line-height:1;color:#e8e5ff;background:rgba(255,255,255,.07);border-color:rgba(225,228,255,.17);transition:transform .28s ease,background .2s ease;}
+#workspacePanel #workspaceCollapse:hover{transform:rotate(90deg);background:rgba(190,177,255,.16);}
+#workspaceBody{display:block!important;max-height:620px;opacity:1;overflow:hidden;transform:translateY(0);transition:max-height .42s cubic-bezier(.22,.8,.25,1),opacity .26s ease,transform .34s cubic-bezier(.22,.8,.25,1),margin .34s ease;}
+#workspacePanel.collapsed #workspaceBody{display:block!important;max-height:0!important;opacity:0;transform:translateY(-8px);pointer-events:none;margin:0!important;}
+#workspacePanel.collapsed .workspace-head{margin:0!important;}
+#workspacePanel:not(.collapsed) .workspace-head{margin-bottom:10px;}
+#workspacePanel .setting-row{margin:10px 0;}
+#workspacePanel .cosmic-tools{margin:12px 0 10px;padding:11px 10px 9px;border:1px solid rgba(214,220,255,.13);border-radius:14px;background:linear-gradient(135deg,rgba(255,255,255,.045),rgba(145,130,255,.035));}
+.cosmic-tools-title{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#d5cbff;margin-bottom:6px;}
+#cosmicRandomize{width:100%;border:1px solid rgba(216,208,255,.22);border-radius:11px;padding:9px 10px;color:#f0edff;background:linear-gradient(125deg,rgba(169,147,255,.18),rgba(255,255,255,.035));cursor:pointer;transition:transform .2s ease,border-color .2s ease,background .2s ease;}
+#cosmicRandomize:hover{transform:translateY(-1px);border-color:rgba(220,210,255,.48);background:linear-gradient(125deg,rgba(169,147,255,.27),rgba(255,255,255,.06));}
+.cosmic-note{font-size:10px;line-height:1.45;color:#aab4d2;margin-top:7px;}
+#cosmicChaosValue{color:#d5c8ff;font-variant-numeric:tabular-nums;}
+#cosmicCanvas{position:fixed;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;opacity:.94;}
+/* One full 360-degree turn returns to the identical frame; star dust shifts by its exact tile size. */
+#nebula{inset:-28%;transform-origin:50% 50%;animation:nebulaSeamless 72s linear infinite!important;will-change:transform;}
+@keyframes nebulaSeamless{from{transform:rotate(0deg) scale(1.04)}to{transform:rotate(360deg) scale(1.04)}}
+#space-dust{animation:cosmicTileLoop 60s linear infinite!important;will-change:background-position;}
+@keyframes cosmicTileLoop{from{background-position:0 0}to{background-position:290px 240px}}
+@media(max-width:760px){
+  #workspacePanel{left:10px!important;right:auto!important;top:145px!important;bottom:auto!important;width:min(270px,calc(100vw - 20px))!important;max-height:calc(100vh - 165px)!important;overflow:hidden!important;}
+  #workspacePanel.collapsed{top:145px!important;bottom:auto!important;width:max-content!important;max-width:calc(100vw - 20px)!important;max-height:none!important;}
+  body.compare-active #workspacePanel{left:10px!important;right:auto!important;top:145px!important;bottom:auto!important;width:min(270px,calc(100vw - 20px))!important;}
+  body.compare-active #workspacePanel.collapsed{top:145px!important;bottom:auto!important;width:max-content!important;max-width:calc(100vw - 20px)!important;}
+  #workspaceBody{overflow-y:auto;}
+}
+body.compare-active #workspacePanel{left:16px!important;right:auto!important;top:145px!important;bottom:auto!important;width:270px!important;height:auto!important;min-height:0!important;max-height:calc(100vh - 165px)!important;}
+body.compare-active #workspacePanel.collapsed{top:145px!important;bottom:auto!important;width:max-content!important;height:auto!important;min-height:0!important;max-height:none!important;}
+@media(prefers-reduced-motion:reduce){#nebula,#space-dust{animation:none!important}#workspacePanel,#workspaceBody,#workspaceCollapse{transition:none!important}}
+
+
+/* SociON v39 — compact top controls and prevent panel collisions */
+.controls .row{display:flex;align-items:center;flex-wrap:wrap;gap:7px;}
+#routeMode,#reset{flex:0 0 auto;}
+#reset.reset-symbol{min-width:38px;width:38px;height:34px;padding:0;font-size:19px;line-height:1;display:inline-flex;align-items:center;justify-content:center;}
+#routeBar{z-index:42!important;background:linear-gradient(135deg,rgba(25,30,56,.68),rgba(8,12,28,.72) 58%,rgba(34,25,60,.66))!important;border-color:rgba(220,226,255,.2)!important;backdrop-filter:blur(24px) saturate(175%)!important;-webkit-backdrop-filter:blur(24px) saturate(175%)!important;}
+#compareBar{z-index:41!important;background:linear-gradient(135deg,rgba(25,30,56,.68),rgba(8,12,28,.72) 58%,rgba(34,25,60,.66))!important;border-color:rgba(220,226,255,.2)!important;backdrop-filter:blur(24px) saturate(175%)!important;-webkit-backdrop-filter:blur(24px) saturate(175%)!important;}
+#workspacePanel{z-index:30!important;max-height:min(44vh,460px)!important;}
+#workspaceBody{max-height:min(36vh,370px)!important;overflow-y:auto!important;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:rgba(190,177,255,.32) transparent;}
+#workspacePanel.collapsed{max-height:none!important;}
+#workspacePanel.collapsed #workspaceBody{max-height:0!important;overflow:hidden!important;}
+body.compare-active #workspacePanel{max-height:min(40vh,400px)!important;}
+body.compare-active #workspaceBody{max-height:min(32vh,320px)!important;}
+@media(max-width:760px){
+  .controls .row{gap:5px;}
+  #reset.reset-symbol{min-width:34px;width:34px;height:32px;}
+  #workspacePanel{max-height:38vh!important;}
+  #workspaceBody{max-height:30vh!important;}
+  body.compare-active #workspacePanel{max-height:34vh!important;}
+  body.compare-active #workspaceBody{max-height:26vh!important;}
+  #routeBar,#compareBar{z-index:42!important;max-height:38vh!important;}
+}
+
+
+/* SociON v40 — preserve lower-left legend during comparison; rounded glass toolbar */
+@media (min-width:761px){
+  body.compare-active #legend{display:block!important;visibility:visible!important;opacity:1!important;}
+  body.compare-active #compareBar{
+    left:min(370px,34vw)!important;right:16px!important;bottom:16px!important;
+    width:auto!important;max-width:680px!important;transform:none!important;
+  }
+}
+/* On narrow screens the compact legend is intentionally hidden to preserve map space. */
+@media (max-width:760px){
+  body.compare-active #legend{display:none!important;}
+  body.compare-active #compareBar{left:12px!important;right:12px!important;bottom:10px!important;width:auto!important;}
+}
+header .controls{
+  position:relative;isolation:isolate;
+  padding:12px 14px 14px!important;
+  border:1px solid rgba(220,226,255,.16)!important;
+  border-radius:22px!important;
+  background:linear-gradient(145deg,rgba(24,29,54,.32),rgba(8,12,28,.24) 58%,rgba(35,27,63,.28))!important;
+  box-shadow:0 14px 38px rgba(0,0,0,.16),inset 0 1px 0 rgba(255,255,255,.13),inset 0 0 24px rgba(171,158,255,.035)!important;
+  -webkit-backdrop-filter:blur(22px) saturate(165%)!important;
+  backdrop-filter:blur(22px) saturate(165%)!important;
+  overflow:visible;
+}
+header .controls:before{
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:-1;
+  background:radial-gradient(ellipse at 14% 0%,rgba(255,255,255,.12),transparent 48%),linear-gradient(115deg,rgba(255,255,255,.035),transparent 40%,rgba(179,164,255,.045));
+  border:1px solid rgba(255,255,255,.035);
+}
+header .controls .row,header .controls #search,header .controls #searchResults{position:relative;z-index:1;}
+@media(max-width:760px){
+  header .controls{width:100%;box-sizing:border-box;padding:10px!important;border-radius:18px!important;align-items:stretch;}
+}
+
+
+/* v42 typography: explicit SF Pro Text Light for all buttons; restore the original SociON wordmark styling */
+button, input, select, textarea,
+button *, [role="button"], [role="button"] * {
+  font-family: "SF Pro Text Light", "SF Pro Text", -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", sans-serif !important;
+  font-weight: 300;
+}
+.brand h1 {
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif !important;
+  font-weight: 400;
+  letter-spacing: .16em;
+}
+
+
+/* SociON v43 — aligned glass panels and independently scrollable type relations */
+@media (min-width:761px){
+  /* Type card starts beneath the top controls glass, not behind it. */
+  #panel{top:176px!important;right:16px!important;left:auto!important;width:min(410px,calc(100vw - 32px))!important;max-height:calc(100vh - 196px)!important;overflow:hidden!important;display:none;}
+  #panel.open{display:flex!important;flex-direction:column;}
+  #pRelations{min-height:0;}
+  #pRelations .relation-nav-list{max-height:min(32vh,310px);overflow-y:auto;overscroll-behavior:contain;padding:2px 5px 4px 0;scrollbar-width:thin;scrollbar-color:rgba(190,177,255,.42) transparent;}
+  #pRelations .relation-nav-list::-webkit-scrollbar{width:6px;}
+  #pRelations .relation-nav-list::-webkit-scrollbar-thumb{background:rgba(190,177,255,.38);border-radius:8px;}
+  /* Comparison shares the lower baseline with the lower-left legend. */
+  body.compare-active #compareBar{left:min(370px,34vw)!important;right:16px!important;bottom:16px!important;top:auto!important;max-height:38vh!important;}
+  /* View settings begin on the same top line as the SociON brand card. */
+  #workspacePanel{left:16px!important;right:auto!important;top:16px!important;bottom:auto!important;width:270px!important;max-height:calc(100vh - 32px)!important;}
+  #workspacePanel.collapsed{top:16px!important;bottom:auto!important;}
+}
+@media(max-width:760px){
+  #panel{left:10px!important;right:10px!important;top:190px!important;bottom:auto!important;width:auto!important;max-height:calc(100vh - 205px)!important;overflow:hidden!important;}
+  #panel.open{display:flex!important;flex-direction:column;}
+  #pRelations{min-height:0;}
+  #pRelations .relation-nav-list{max-height:28vh;overflow-y:auto;overscroll-behavior:contain;padding:2px 5px 4px 0;scrollbar-width:thin;}
+  #workspacePanel{left:10px!important;right:auto!important;top:145px!important;bottom:auto!important;}
+  body.compare-active #compareBar{left:12px!important;right:12px!important;bottom:10px!important;top:auto!important;}
+}
+
+
+
+/* SociON v44 — keep view settings anchored beside the type relation card in every mode */
+@media (min-width:761px){
+  #workspacePanel,
+  #workspacePanel.collapsed,
+  body.compare-active #workspacePanel,
+  body.compare-active #workspacePanel.collapsed,
+  body.route-active #workspacePanel{
+    top:176px!important;bottom:auto!important;
+  }
+  #panel{top:176px!important;}
+  .brand h1{font-size:29px!important;line-height:1.12;letter-spacing:.16em!important;}
+}
+@media (max-width:760px){
+  #workspacePanel,
+  #workspacePanel.collapsed,
+  body.compare-active #workspacePanel,
+  body.compare-active #workspacePanel.collapsed{
+    top:190px!important;bottom:auto!important;
+  }
+  .brand h1{font-size:25px!important;line-height:1.12;}
+}
+
+
+/* SociON v45 — transparent header surfaces, anchored settings and full-height type card */
+.brand,
+header .controls{
+  background:transparent!important;
+  border-color:transparent!important;
+  box-shadow:none!important;
+  -webkit-backdrop-filter:none!important;
+  backdrop-filter:none!important;
+}
+.brand:before,
+header .controls:before{display:none!important;content:none!important;}
+@media (min-width:761px){
+  #workspacePanel{top:176px!important;bottom:auto!important;max-height:none!important;}
+  #workspacePanel:not(.collapsed){overflow:hidden!important;}
+  #workspaceBody{min-height:0!important;}
+  #panel{top:176px!important;bottom:16px!important;max-height:none!important;height:auto!important;overflow:hidden!important;}
+  #panel.open{display:flex!important;flex-direction:column!important;}
+  #pDescription{flex:0 1 auto;}
+  #pRelations{flex:1 1 auto;overflow-y:auto;min-height:0;}
+  #pRelations .relation-nav-list{max-height:none!important;}
+}
+@media (max-width:760px){
+  .brand,header .controls{background:transparent!important;border-color:transparent!important;box-shadow:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;}
+  .brand:before,header .controls:before{display:none!important;content:none!important;}
+  #panel{top:190px!important;bottom:12px!important;max-height:none!important;height:auto!important;overflow:hidden!important;}
+  #panel.open{display:flex!important;flex-direction:column!important;}
+  #pRelations{flex:1 1 auto;overflow-y:auto;min-height:0;}
+  #pRelations .relation-nav-list{max-height:none!important;}
+}
+
+
+
+/* SociON v46 — restore the primary glass cards; remove only the extra underlay layer */
+.brand{
+  background:linear-gradient(145deg,rgba(24,29,54,.58),rgba(8,12,28,.48) 58%,rgba(35,27,63,.50))!important;
+  border:1px solid rgba(220,226,255,.18)!important;
+  border-radius:20px!important;
+  box-shadow:0 14px 38px rgba(0,0,0,.20),inset 0 1px 0 rgba(255,255,255,.13)!important;
+  -webkit-backdrop-filter:blur(22px) saturate(165%)!important;
+  backdrop-filter:blur(22px) saturate(165%)!important;
+}
+header .controls{
+  background:linear-gradient(145deg,rgba(24,29,54,.58),rgba(8,12,28,.48) 58%,rgba(35,27,63,.50))!important;
+  border:1px solid rgba(220,226,255,.18)!important;
+  border-radius:22px!important;
+  box-shadow:0 14px 38px rgba(0,0,0,.20),inset 0 1px 0 rgba(255,255,255,.13)!important;
+  -webkit-backdrop-filter:blur(22px) saturate(165%)!important;
+  backdrop-filter:blur(22px) saturate(165%)!important;
+}
+/* Remove the additional translucent sheen/underlay behind the restored glass cards. */
+.brand:before,header .controls:before{display:none!important;content:none!important;background:none!important;border:0!important;box-shadow:none!important;}
+@media(max-width:760px){
+  .brand{background:linear-gradient(145deg,rgba(24,29,54,.58),rgba(8,12,28,.48) 58%,rgba(35,27,63,.50))!important;border:1px solid rgba(220,226,255,.18)!important;}
+  header .controls{background:linear-gradient(145deg,rgba(24,29,54,.58),rgba(8,12,28,.48) 58%,rgba(35,27,63,.50))!important;border:1px solid rgba(220,226,255,.18)!important;}
+}
+
+
+/* SociON v48 — preserve the animated nebula and remove only the full-width header backdrop. */
+#space-dust,#cosmicCanvas{pointer-events:none!important;}
+header.ui{background:transparent!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:none!important;border:0!important;}
+
+@media (min-width:761px){
+  #panel.open{display:flex!important;flex-direction:column!important;}
+  #pRelations{flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important;overscroll-behavior:contain!important;scrollbar-width:thin!important;scrollbar-color:rgba(190,177,255,.42) transparent!important;}
+  #pRelations .relation-nav-list{max-height:none!important;height:auto!important;overflow:visible!important;}
+  #workspaceBody{overflow-y:auto!important;}
+}
+@media (max-width:760px){
+  #pRelations{flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important;overscroll-behavior:contain!important;scrollbar-width:thin!important;}
+  #pRelations .relation-nav-list{max-height:none!important;height:auto!important;overflow:visible!important;}
+}
+.audio-tools{margin-top:10px;}
+.audio-tools .setting-row select{width:100%;min-width:0;max-width:100%;padding:7px 8px;border-radius:9px;border:1px solid rgba(180,170,255,.24);background:rgba(5,8,22,.72);color:var(--text);font:inherit;}
+.audio-toggle-row{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.audio-ios-switch{position:relative;display:inline-flex;align-items:center;justify-content:flex-start;flex:0 0 auto;width:58px;height:34px;padding:3px;border:1px solid rgba(220,230,255,.34);border-radius:999px;background:rgba(220,230,255,.09);box-shadow:inset 0 1px 1px rgba(255,255,255,.12),0 4px 16px rgba(0,0,0,.12);backdrop-filter:blur(18px) saturate(150%);-webkit-backdrop-filter:blur(18px) saturate(150%);cursor:pointer;transition:background .24s ease,border-color .24s ease,box-shadow .24s ease;}
+.audio-ios-switch .switch-thumb{position:absolute;left:3px;top:3px;width:26px;height:26px;border-radius:50%;background:linear-gradient(145deg,rgba(255,255,255,.98),rgba(218,225,245,.88));box-shadow:0 2px 7px rgba(0,0,0,.28),inset 0 1px 1px rgba(255,255,255,.9);transition:transform .24s cubic-bezier(.2,.8,.2,1);}
+.audio-ios-switch .switch-state{position:absolute;right:7px;font:600 8px/1 system-ui,sans-serif;letter-spacing:.04em;color:rgba(225,231,255,.72);transition:opacity .2s ease;}
+.audio-ios-switch[aria-pressed="true"]{background:rgba(139,113,255,.36);border-color:rgba(190,173,255,.72);box-shadow:inset 0 0 14px rgba(153,125,255,.2),0 0 18px rgba(132,102,255,.13);}
+.audio-ios-switch[aria-pressed="true"] .switch-thumb{transform:translateX(24px);}
+.audio-ios-switch[aria-pressed="true"] .switch-state{right:auto;left:8px;color:rgba(255,255,255,.92);}
+.audio-ios-switch:focus-visible{outline:2px solid rgba(190,173,255,.9);outline-offset:3px;}
+.audio-tools .cosmic-note{margin-top:5px;}
+#ambientRadioAudio{display:none;}
+</style>
+</head>
+<body>
+
+<div id="graph"></div>
+<div id="nebula"></div><canvas id="cosmicCanvas" aria-hidden="true"></canvas><div id="space-dust"></div>
+
+<header class="ui">
+  <div class="brand">
+    <h1>SociON</h1>
+    <p>
+      Интерактивный тессеракт 16 соционических типов · 120 уникальных связей.
+      Классическая соционика Аушры, модель А.
+    </p>
+  </div>
+
+  <div class="controls">
+    <input id="search" placeholder="Поиск типа: Дон Кихот, ИЛЭ…" autocomplete="off">
+    <div id="searchResults"></div>
+
+    <div class="row">
+      <button class="chip active" data-filter="all">Все квадры</button>
+      <button class="chip" data-filter="alpha">Альфа</button>
+      <button class="chip" data-filter="beta">Бета</button>
+      <button class="chip" data-filter="gamma">Гамма</button>
+      <button class="chip" data-filter="delta">Дельта</button>
+      <button class="chip" id="compareMode">Сравнение</button>
+      <button class="chip" id="routeMode">Маршрут</button>
+      <button class="chip reset-symbol" id="reset" aria-label="Сбросить выбор" title="Сбросить выбор">⛒</button>
+    </div>
+  </div>
+</header>
+
+
+<div id="workspacePanel" class="ui collapsed" aria-label="Настройки отображения">
+  <div class="workspace-head"><strong>Настройки вида</strong><button id="workspaceCollapse" aria-label="Свернуть настройки">×</button></div>
+  <div id="workspaceBody">
+    <label class="setting-row"><span>Интенсивность свечения</span><input id="glowControl" type="range" min="25" max="180" value="100" step="5"></label>
+    <label class="setting-row"><span>Видимость названий над узлами</span><input id="nodeOpacityControl" type="range" min="0" max="100" value="100" step="5"></label>
+    <label class="setting-row"><span>Скорость туманности</span><input id="nebulaSpeedControl" type="range" min="0" max="200" value="100" step="10"></label>
+    <div class="cosmic-tools">
+      <div class="cosmic-tools-title">Живой космос</div>
+      <label class="setting-row"><span>Хаос космоса <output id="cosmicChaosValue">45%</output></span><input id="cosmicChaosControl" type="range" min="0" max="100" value="45" step="1"></label>
+      <button type="button" id="cosmicRandomize">⤨ Случайная туманность</button>
+      <div class="cosmic-note">Созвездия, звёздная пыль и облака меняются плавно.</div>
+    </div>
+    <div class="cosmic-tools audio-tools" id="audioTools">
+      <div class="cosmic-tools-title">Звуковая атмосфера</div>
+      <div class="setting-row audio-toggle-row"><span>Ambient-радио</span><button id="ambientRadioToggle" class="audio-ios-switch" type="button" role="switch" aria-checked="true" aria-pressed="true" aria-label="Ambient-радио: включено"><span class="switch-state">ON</span><span class="switch-thumb"></span></button></div>
+      <label class="setting-row"><span>Станция</span><select id="ambientRadioStation"><option value="asp">Ambient Sleeping Pill · глубокий ambient</option><option value="mellow">Radio Paradise · Mellow Mix</option></select></label>
+      <label class="setting-row"><span>Громкость <output id="ambientVolumeValue">35%</output></span><input id="ambientVolume" type="range" min="0" max="100" value="35" step="5"></label>
+      <div id="ambientRadioStatus" class="cosmic-note" aria-live="polite">Пробую запустить ambient-радио при входе…</div>
+      <audio id="ambientRadioAudio" preload="none"></audio>
+    </div>
+    <div class="workspace-foot"><span>Настройки влияют на отображение и звук.</span><button id="workspaceDefaults">По умолчанию</button></div>
+  </div>
+</div>
+
+
+
+<div id="panel" class="ui">
+  <button id="close">×</button>
+  <p class="kicker" id="pKicker"></p>
+  <h2 id="pTitle"></h2>
+  <div id="pTags"></div>
+
+  <h3>Описание типа</h3>
+  <p id="pDescription"></p>
+
+  <h3>Связи типа</h3>
+  <div id="pRelations"></div>
+</div>
+
+<div id="compareBar" class="ui"></div>
+<div id="routeBar" class="ui"></div>
+
+<div id="legend" class="ui">
+  <div><span class="dot" style="background:var(--alpha)"></span>Альфа: ИЛЭ, СЭИ, ЭСЭ, ЛИИ</div>
+  <div><span class="dot" style="background:var(--beta)"></span>Бета: ЭИЭ, ЛСИ, СЛЭ, ИЭИ</div>
+  <div><span class="dot" style="background:var(--gamma)"></span>Гамма: СЭЭ, ИЛИ, ЛИЭ, ЭСИ</div>
+  <div><span class="dot" style="background:var(--delta)"></span>Дельта: ЛСЭ, ЭИИ, ИЭЭ, СЛИ</div>
+  <div class="legend-caption">Фильтр по типу связи</div>
+  <div id="relationFilters"></div>
+</div>
+
+
+<script>
+// Полностью автономный Canvas-рендерер: не использует CDN, WebGL или внешние библиотеки.
+// Геометрия остаётся трёхмерной (куб в кубе), проекция и вращение выполняются локально.
+const sociOnCanvas = document.createElement('canvas');
+sociOnCanvas.id = 'sociOnOfflineCanvas';
+sociOnCanvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab';
+document.getElementById('graph').appendChild(sociOnCanvas);
+const sociOnCtx = sociOnCanvas.getContext('2d');
+if (!sociOnCtx) throw new Error('Браузер не поддерживает Canvas 2D.');
+let sociOnGraphData={nodes:[],links:[]}, sociOnNodeById=new Map(), sociOnCubeEdgesCache=null, sociOnNodeVisible=()=>true, sociOnLinkVisible=()=>true, sociOnProjectedById=new Map();
+let sociOnNodeColor=n=>n.color, sociOnLinkColor=l=>'#8b5cf6', sociOnLinkWidth=l=>1, sociOnLinkOpacity=l=>.6;
+let sociOnNodeClick=()=>{}, sociOnLinkClick=()=>{}, sociOnNodeHover=()=>{}, sociOnBackgroundClick=()=>{};
+let sociOnRotX=-.22, sociOnRotY=.42, sociOnZoom=1, sociOnTarget={x:0,y:0,z:0}, sociOnProjected=[], sociOnDragging=false, sociOnMoved=false, sociOnLast={x:0,y:0};
+let sociOnPointerNode=null;
+let sociOnAnimTime=0;
+let sociOnGlow=1, sociOnNodeOpacity=1, sociOnNebulaSpeed=1;
+function sociOnResize(){const dpr=Math.min(window.devicePixelRatio||1,1.4);sociOnCanvas.width=Math.max(320,innerWidth)*dpr;sociOnCanvas.height=Math.max(320,innerHeight)*dpr;sociOnCtx.setTransform(dpr,0,0,dpr,0,0);sociOnDraw();}
+function sociOnProject(n){let x=(n.x??n.fx??0)-sociOnTarget.x,y=(n.y??n.fy??0)-sociOnTarget.y,z=(n.z??n.fz??0)-sociOnTarget.z;const cy=Math.cos(sociOnRotY),sy=Math.sin(sociOnRotY),cx=Math.cos(sociOnRotX),sx=Math.sin(sociOnRotX);let xx=x*cy-z*sy,zz=x*sy+z*cy,yy=y*cx-zz*sx;zz=y*sx+zz*cx;const depth=900/(900+zz),scale=Math.min(innerWidth,innerHeight)*.43/420*sociOnZoom*depth;return {x:innerWidth/2+xx*scale,y:innerHeight/2-yy*scale,z:zz,scale};}
+function hexToRgba(hex,alpha){let h=String(hex||'#b7a5ff').replace('#','').trim();if(h.length===3)h=h.split('').map(x=>x+x).join('');const v=parseInt(h.slice(0,6),16);if(!Number.isFinite(v))return `rgba(190,175,255,${alpha})`;return `rgba(${(v>>16)&255},${(v>>8)&255},${v&255},${alpha})`;}
+function sociOnDraw(){if(!sociOnCtx)return;const c=sociOnCtx,w=innerWidth,h=innerHeight; sociOnAnimTime=(performance.now()||0)*0.00022*sociOnNebulaSpeed; c.clearRect(0,0,w,h);sociOnProjected=[];
+ const visible=sociOnGraphData.nodes.filter(sociOnNodeVisible);const byId=sociOnNodeById; sociOnProjectedById.clear();
+ for(const n of visible){const p=sociOnProject(n);const projected={node:n,...p};sociOnProjected.push(projected);sociOnProjectedById.set(n.id,projected);}
+ const active=selectedForCompare.length ? null : (selectedNodeId||hoveredNodeId);
+ const activeIds=new Set(selectedPathIds || (selectedForCompare.length ? selectedForCompare : (selectedRelationPair ? selectedRelationPair : (active?[active]:[]))));
+ // Внешний и внутренний куб рисуются как геометрический каркас.
+ if(!sociOnCubeEdgesCache){const edges=[];const outer=['ILE','IEE','ESE','LSE','SEE','EIE','LIE','SLE'];const inner=['SEI','SLI','LII','EII','ESI','LSI','ILI','IEI'];const cubeEdges=ids=>{for(let i=0;i<ids.length;i++)for(let j=i+1;j<ids.length;j++){const a=schlegelPositions[ids[i]],b=schlegelPositions[ids[j]];let diff=(a.x!==b.x?1:0)+(a.y!==b.y?1:0)+(a.z!==b.z?1:0);if(diff===1)edges.push([ids[i],ids[j]]);}};cubeEdges(outer);cubeEdges(inner);for(let i=0;i<8;i++)edges.push([outer[i],inner[i]]);sociOnCubeEdgesCache=edges;}
+ c.save();c.lineWidth=1;c.setLineDash([]);for(const [aId,bId] of sociOnCubeEdgesCache){const A=sociOnProjectedById.get(aId),B=sociOnProjectedById.get(bId);if(!A||!B)continue;c.strokeStyle='rgba(145,157,255,.30)';c.shadowColor='#8374ff';c.shadowBlur=5;c.beginPath();c.moveTo(A.x,A.y);c.lineTo(B.x,B.y);c.stroke();}c.restore();
+ // Отношения: 120 уникальных пар, пунктир геометрически отрисован Canvas-ом.
+ for(const l of sociOnGraphData.links){if(!sociOnLinkVisible(l))continue;const aid=typeof l.source==='object'?l.source.id:l.source,bid=typeof l.target==='object'?l.target.id:l.target;const a=byId.get(aid),b=byId.get(bid),A=sociOnProjectedById.get(aid),B=sociOnProjectedById.get(bid);if(!a||!b||!A||!B)continue;const pairMatch=!!selectedRelationPair && ((selectedRelationPair[0]===aid&&selectedRelationPair[1]===bid)||(selectedRelationPair[0]===bid&&selectedRelationPair[1]===aid));const pathMatch=!!selectedPathPairs&&selectedPathPairs.some(pair=>(pair[0]===aid&&pair[1]===bid)||(pair[0]===bid&&pair[1]===aid));const connected=pathMatch || pairMatch || (!selectedRelationPair&&!selectedPathPairs&&activeIds.size>0&&(activeIds.has(aid)||activeIds.has(bid)));const color=sociOnLinkColor(l);c.save();c.globalAlpha=selectedPathPairs?(pathMatch?1:.09):(selectedRelationPair?(pairMatch?1:.13):sociOnLinkOpacity(l));c.setLineDash(connected?[]:[5,5]);c.lineCap='round';c.lineJoin='round';
+ // Два прохода: мягкий цветной ореол и чёткое цветное ядро, чтобы тип связи читался сквозь свечение.
+ c.strokeStyle=color;c.lineWidth=(connected?4.2:2.0)+sociOnLinkWidth(l)*.45;c.shadowColor=color;c.shadowBlur=(connected?26:10)*sociOnGlow;c.globalAlpha*=((connected?.88:.58)*Math.min(1.8,sociOnGlow));c.beginPath();c.moveTo(A.x,A.y);c.lineTo(B.x,B.y);c.stroke();
+ c.shadowBlur=0;c.globalAlpha=selectedPathPairs?(pathMatch?1:.09):(selectedRelationPair?(pairMatch?1:.13):((connected?1:.92)*sociOnLinkOpacity(l)));c.strokeStyle=color;c.lineWidth=connected?2.2:Math.max(1.05,sociOnLinkWidth(l)*.9);c.beginPath();c.moveTo(A.x,A.y);c.lineTo(B.x,B.y);c.stroke();c.restore();if(connected&&l.directed){const reverse=["Под","Подр"].includes(l.relationCode);const from=reverse?B:A,to=reverse?A:B;const ang=Math.atan2(to.y-from.y,to.x-from.x),len=9;c.fillStyle=color;c.beginPath();c.moveTo(to.x,to.y);c.lineTo(to.x-len*Math.cos(ang-.45),to.y-len*Math.sin(ang-.45));c.lineTo(to.x-len*Math.cos(ang+.45),to.y-len*Math.sin(ang+.45));c.closePath();c.fill();}}
+ // Тождество не входит в 120 межтиповых пар: показываем его отдельными светящимися петлями вокруг каждого видимого узла.
+ if (activeRelationFilter === "identity") {
+   const identityColor = (typeof REL !== "undefined" && REL.identity) ? REL.identity.color : "#94a3b8";
+   for (const n of visible) {
+     if (!sociOnNodeVisible(n)) continue;
+     const P = sociOnProject(n);
+     const radius = Math.max(10, 13 * Math.max(.72, P.scale * 3.0));
+     const pulse = 1 + Math.sin(sociOnAnimTime * 2.4 + String(n.id).length) * .035;
+     c.save();
+     c.translate(P.x, P.y);
+     c.rotate(-.42 + Math.sin(sociOnAnimTime * .35) * .05);
+     c.scale(1.22 * pulse, .72 * pulse);
+     c.globalAlpha = .96;
+     c.strokeStyle = identityColor;
+     c.lineWidth = 5.2;
+     c.shadowColor = identityColor;
+     c.shadowBlur = 21 * sociOnGlow;
+     c.beginPath(); c.ellipse(0, 0, radius, radius, 0, 0, Math.PI * 2); c.stroke();
+     c.shadowBlur = 0;
+     c.globalAlpha = .98;
+     c.lineWidth = 1.8;
+     c.beginPath(); c.ellipse(0, 0, radius, radius, 0, 0, Math.PI * 2); c.stroke();
+     // Маленький яркий сегмент помогает считывать петлю как отдельную связь.
+     c.globalAlpha = .9;
+     c.lineWidth = 2.4;
+     c.beginPath(); c.ellipse(0, 0, radius, radius, 0, -.30, .42); c.stroke();
+     c.restore();
+   }
+ }
+ // Узлы и подписи поверх связей.
+ const activeNeighbours=new Set();if(activeIds.size)for(const l of sociOnGraphData.links){const a=typeof l.source==='object'?l.source.id:l.source,b=typeof l.target==='object'?l.target.id:l.target;if(activeIds.has(a))activeNeighbours.add(b);if(activeIds.has(b))activeNeighbours.add(a);}
+ sociOnProjected.sort((a,b)=>a.z-b.z);for(const p of sociOnProjected){const n=p.node;const isActive=activeIds.has(n.id);const dim=activeIds.size>0&&!isActive&&!activeNeighbours.has(n.id);const r=(isActive?8.6:6.1)*Math.max(.7,p.scale*3.2);const col=sociOnNodeColor(n);c.save();c.globalAlpha=(dim?.2:1);
+ // Полупрозрачная объёмная сфера: стеклянная оболочка и медленно движущаяся туманность внутри.
+ // Внешний ореол оставлен сдержанным, чтобы не перебивать цвета связей.
+ c.shadowColor=col;c.shadowBlur=(isActive?34:21)*sociOnGlow;c.fillStyle=col;c.globalAlpha*=.29;c.beginPath();c.arc(p.x,p.y,r*1.10,0,Math.PI*2);c.fill();c.globalAlpha=(dim?.2:1);c.shadowBlur=0;
+ c.save();c.beginPath();c.arc(p.x,p.y,r,0,Math.PI*2);c.clip();
+ // Глубокая прозрачная основа с освещённой верхней левой частью.
+ const sphere=c.createRadialGradient(p.x-r*.38,p.y-r*.43,r*.02,p.x+r*.18,p.y+r*.22,r*1.18);sphere.addColorStop(0,hexToRgba(col,.66));sphere.addColorStop(.13,'rgba(225,218,255,.36)');sphere.addColorStop(.34,hexToRgba(col,.60));sphere.addColorStop(.68,hexToRgba(col,.30));sphere.addColorStop(.88,'rgba(20,24,54,.30)');sphere.addColorStop(1,'rgba(9,12,31,.68)');c.fillStyle=sphere;c.fillRect(p.x-r,p.y-r,2*r,2*r);
+ // Пастельные газовые облака внутри шара; их смещение меняется во времени.
+ const t=sociOnAnimTime+(String(n.id).split('').reduce((a,ch)=>a+ch.charCodeAt(0),0)%37)*.13;
+ const clouds=[[-.30,-.10,.62,.23,.72],[.20,-.22,.50,.29,.42],[.14,.30,.64,.22,.52],[-.28,.32,.46,.25,.35]];
+ for(let ci=0;ci<clouds.length;ci++){const q=clouds[ci],cx=p.x+r*(q[0]+Math.sin(t*(ci%2?-.7:.8)+ci)*.11),cy=p.y+r*(q[1]+Math.cos(t*.72+ci*1.7)*.10),cr=r*q[2];const mist=c.createRadialGradient(cx,cy,cr*.02,cx,cy,cr);mist.addColorStop(0,hexToRgba(col,q[5]||q[4]));mist.addColorStop(.42,hexToRgba(col,.20));mist.addColorStop(1,hexToRgba(col,0));c.fillStyle=mist;c.fillRect(p.x-r,p.y-r,2*r,2*r);}
+ // Тонкие перламутровые завихрения — очень лёгкие, чтобы не превратить узел в плоскую иконку.
+ c.globalCompositeOperation='screen';c.lineCap='round';for(let wi=0;wi<2;wi++){const drift=t*(wi?-.75:.55),yy=p.y+r*(wi?-.06:.24)+Math.sin(drift+n.id.length)*r*.12;c.beginPath();c.moveTo(p.x-r*.82,yy-r*.12);c.bezierCurveTo(p.x-r*.34,yy-r*.48,p.x+r*.18,yy+r*.48,p.x+r*.84,yy-r*.18);c.strokeStyle=hexToRgba(col,.20);c.lineWidth=Math.max(.6,r*.12);c.stroke();}c.globalCompositeOperation='source-over';
+ // Отражение и мягкая окантовка стеклянной оболочки.
+ const sheen=c.createRadialGradient(p.x-r*.38,p.y-r*.43,0,p.x-r*.26,p.y-r*.30,r*.66);sheen.addColorStop(0,'rgba(255,255,255,.40)');sheen.addColorStop(.30,hexToRgba(col,.16));sheen.addColorStop(1,'rgba(255,255,255,0)');c.fillStyle=sheen;c.fillRect(p.x-r,p.y-r,2*r,2*r);c.restore();
+ const rim=c.createRadialGradient(p.x-r*.25,p.y-r*.25,r*.68,p.x,p.y,r);rim.addColorStop(0,'rgba(255,255,255,0)');rim.addColorStop(.82,hexToRgba(col,.08));rim.addColorStop(1,hexToRgba(col,.42));c.fillStyle=rim;c.beginPath();c.arc(p.x,p.y,r,0,Math.PI*2);c.fill();c.strokeStyle=hexToRgba(col,isActive?.58:.30);c.lineWidth=isActive?1.5:.7;c.stroke();if(sociOnNodeOpacity>0){c.globalAlpha=(dim?.2:1)*sociOnNodeOpacity;c.font=(isActive?'600 13px':'400 12px')+' \"SF Pro Text Light\", \"SF Pro Text\", -apple-system, BlinkMacSystemFont, system-ui, sans-serif';c.textAlign='center';c.textBaseline='bottom';const label=`${n.name}, ${n.code}`;const tw=c.measureText(label).width;c.fillStyle='rgba(3,5,14,.82)';c.beginPath();c.roundRect(p.x-tw/2-5,p.y-r-23,tw+10,19,5);c.fill();c.fillStyle=dim?'rgba(210,215,235,.45)':'#f3f1ff';c.shadowColor=col;c.shadowBlur=dim?0:7*sociOnGlow;c.fillText(label,p.x,p.y-r-8);}c.restore();}
+}
+
+// Панель настроек визуального рабочего пространства.
+const workspacePanel=document.getElementById('workspacePanel');
+document.getElementById('workspaceCollapse').addEventListener('click',()=>{workspacePanel.classList.toggle('collapsed');});
+function applyVisualSettings(){
+ const glow=Number(document.getElementById('glowControl').value), opacity=Number(document.getElementById('nodeOpacityControl').value), speed=Number(document.getElementById('nebulaSpeedControl').value);
+ sociOnGlow=glow/100; sociOnNodeOpacity=opacity/100; sociOnNebulaSpeed=speed/100;
+ document.getElementById('nebula').style.animationDuration=(speed===0?'0s':(14/(speed/100))+'s'); document.getElementById('space-dust').style.animationDuration=(speed===0?'0s':(45/(speed/100))+'s'); sociOnDraw();
+}
+['glowControl','nodeOpacityControl','nebulaSpeedControl'].forEach(id=>document.getElementById(id).addEventListener('input',applyVisualSettings));
+document.getElementById('workspaceDefaults').addEventListener('click',()=>{document.getElementById('glowControl').value=100;document.getElementById('nodeOpacityControl').value=100;document.getElementById('nebulaSpeedControl').value=100;applyVisualSettings();});
+// Initial visual settings are applied after application state has been initialized.
+
+let sociOnLastFrame=0;function sociOnTick(now=0){sociOnLastFrame=now;sociOnDraw();requestAnimationFrame(sociOnTick);} 
+function ForceGraph3D(){return function(container){const api={
+ width(){return api},height(){return api},backgroundColor(){return api},showNavInfo(){return api},nodeLabel(){return api},nodeRelSize(){return api},nodeThreeObject(){return api},nodeThreeObjectExtend(){return api},linkDirectionalParticles(){return api},linkDirectionalParticleWidth(){return api},linkDirectionalParticleColor(){return api},linkDirectionalArrowLength(){return api},linkDirectionalArrowRelPos(){return api},linkDirectionalArrowColor(){return api},linkThreeObject(){return api},linkThreeObjectExtend(){return api},linkPositionUpdate(){return api},
+ nodeColor(v){if(typeof v==='function')sociOnNodeColor=v;return api},linkColor(v){if(typeof v==='function')sociOnLinkColor=v;return api},linkWidth(v){if(typeof v==='function')sociOnLinkWidth=v;return api},linkOpacity(v){if(typeof v==='function')sociOnLinkOpacity=v;return api},nodeVisibility(v){if(typeof v==='function')sociOnNodeVisible=v;sociOnDraw();return api},linkVisibility(v){if(typeof v==='function')sociOnLinkVisible=v;sociOnDraw();return api},
+ graphData(v){if(v){sociOnGraphData=v;sociOnNodeById=new Map((v.nodes||[]).map(n=>[n.id,n]));}sociOnDraw();return api},refresh(){sociOnDraw();return api},d3Force(){return {strength(){return this},distance(){return this}}},cameraPosition(pos,target){if(target)sociOnTarget={x:target.x||0,y:target.y||0,z:target.z||0};sociOnDraw();return api},zoomToFit(){sociOnTarget={x:0,y:0,z:0};sociOnZoom=1;sociOnDraw();return api},onNodeClick(v){if(v)sociOnNodeClick=v;return api},onLinkClick(v){if(v)sociOnLinkClick=v;return api},onNodeHover(v){if(v)sociOnNodeHover=v;return api},onBackgroundClick(v){if(v)sociOnBackgroundClick=v;return api}};return api;};}
+function SpriteText(text){this.text=text;}
+window.addEventListener('resize',sociOnResize);
+sociOnCanvas.addEventListener('pointerdown',e=>{sociOnDragging=true;sociOnMoved=false;sociOnLast={x:e.clientX,y:e.clientY};sociOnCanvas.style.cursor='grabbing';sociOnCanvas.setPointerCapture(e.pointerId);});
+sociOnCanvas.addEventListener('pointermove',e=>{if(sociOnDragging){const dx=e.clientX-sociOnLast.x,dy=e.clientY-sociOnLast.y;if(Math.abs(dx)+Math.abs(dy)>2)sociOnMoved=true;sociOnRotY+=dx*.006;sociOnRotX=Math.max(-1.5,Math.min(1.5,sociOnRotX+dy*.006));sociOnLast={x:e.clientX,y:e.clientY};sociOnDraw();return;}let found=null;for(const p of [...sociOnProjected].reverse()){if(Math.hypot(p.x-e.clientX,p.y-e.clientY)<14){found=p.node;break;}}if((found?.id||null)!==(sociOnPointerNode?.id||null)){sociOnPointerNode=found;sociOnNodeHover(found||null);sociOnDraw();}sociOnCanvas.style.cursor=found?'pointer':'grab';});
+sociOnCanvas.addEventListener('pointerup',e=>{sociOnDragging=false;sociOnCanvas.style.cursor='grab';if(sociOnMoved)return;let found=null;for(const p of [...sociOnProjected].reverse()){if(Math.hypot(p.x-e.clientX,p.y-e.clientY)<16){found=p.node;break;}}if(found){sociOnNodeClick(found);sociOnDraw();return;}let best=null,bestD=10;for(const l of sociOnGraphData.links){if(!sociOnLinkVisible(l))continue;const a=typeof l.source==='object'?l.source.id:l.source,b=typeof l.target==='object'?l.target.id:l.target;const A=sociOnProjected.find(p=>p.node.id===a),B=sociOnProjected.find(p=>p.node.id===b);if(!A||!B)continue;const vx=B.x-A.x,vy=B.y-A.y,t=Math.max(0,Math.min(1,((e.clientX-A.x)*vx+(e.clientY-A.y)*vy)/(vx*vx+vy*vy||1)));const d=Math.hypot(e.clientX-A.x-t*vx,e.clientY-A.y-t*vy);if(d<bestD){bestD=d;best=l;}}if(best)sociOnLinkClick(best);else sociOnBackgroundClick();});
+sociOnCanvas.addEventListener('pointercancel',()=>{sociOnDragging=false;sociOnCanvas.style.cursor='grab';});
+sociOnCanvas.addEventListener('wheel',e=>{e.preventDefault();sociOnZoom=Math.max(.45,Math.min(2.6,sociOnZoom*(e.deltaY<0?1.1:.9)));sociOnDraw();},{passive:false});
+
+const QUADRAS = {
+  alpha:{name:"Альфа",color:"#a99bff"},
+  beta:{name:"Бета",color:"#f08aa8"},
+  gamma:{name:"Гамма",color:"#55d6bd"},
+  delta:{name:"Дельта",color:"#e8bd78"}
+};
+
+const REL = {
+  identity:{
+    name:"Тождество",
+    symmetric:true,
+    color:"#9AA7B8",
+    desc:"Отношения между представителями одного и того же типа. Похожие сильные и слабые стороны, общий ритм, но ограниченные возможности взаимного дополнения."
+  },
+  duality:{
+    name:"Дуальность",
+    symmetric:true,
+    color:"#69D6B8",
+    desc:"Наиболее гармоничные отношения полного дополнения: сильные функции одного типа приходятся на слабые места другого. Естественное понимание и взаимная поддержка."
+  },
+  activation:{
+    name:"Активация",
+    symmetric:true,
+    color:"#55BCEB",
+    desc:"Энергичные, воодушевляющие отношения. Партнёры активируют друг друга, но при длительном тесном контакте возможна перевозбуждённость."
+  },
+  mirror:{
+    name:"Зеркальность",
+    symmetric:true,
+    color:"#A89BFF",
+    desc:"Похожий способ мышления и общие интересы, однако выводы и методы могут расходиться. Хорошие отношения для обмена идеями."
+  },
+  kindred:{
+    name:"Родственные",
+    symmetric:true,
+    color:"#7FA8F8",
+    desc:"Партнёры понимают друг друга без долгих объяснений, имеют близкие ценности и интересы, но могут конкурировать в одной сфере."
+  },
+  semiDuality:{
+    name:"Полудуальность",
+    symmetric:true,
+    color:"#49C9C1",
+    desc:"Частичное дополнение и привлекательность, но без полной устойчивости дуальности: со временем могут проявляться различия в ритме и приоритетах."
+  },
+  business:{
+    name:"Деловые",
+    symmetric:true,
+    color:"#B0BBCB",
+    desc:"Отношения сотрудничества и обмена опытом. Хорошо подходят для совместной работы, но эмоциональная близость развивается труднее."
+  },
+  mirage:{
+    name:"Миражные",
+    symmetric:true,
+    color:"#7F91E8",
+    desc:"На первый взгляд лёгкие и приятные отношения, создающие иллюзию близости. При углублении контакта выявляются различия в понимании ситуаций."
+  },
+  superego:{
+    name:"Суперэго",
+    symmetric:true,
+    color:"#E28AB8",
+    desc:"Взаимное восхищение сильными сторонами друг друга сочетается с напряжением: партнёры невольно задевают уязвимые места."
+  },
+  extinguishment:{
+    name:"Погашение",
+    symmetric:true,
+    color:"#B28AE2",
+    desc:"Спокойные, нейтральные отношения. Партнёры могут гасить излишнюю активность друг друга, но им сложно полностью понять мотивы другого."
+  },
+  quasiIdentity:{
+    name:"Квазитождество",
+    symmetric:true,
+    color:"#E884A0",
+    desc:"Внешняя похожесть при глубоком различии подходов. Может возникать взаимное непонимание и ощущение, что партнёр «говорит на другом языке»."
+  },
+  conflict:{
+    name:"Конфликт",
+    symmetric:true,
+    color:"#F16F78",
+    desc:"Наиболее напряжённые отношения: партнёры непреднамеренно бьют по болевым точкам друг друга. Требуют дистанции и осознанных границ."
+  },
+  order:{
+    name:"Заказ",
+    symmetric:false,
+    color:"#EBCB69",
+    desc:"Направленная связь: заказчик передаёт подзаказному информацию и задачи, которые тому трудно самостоятельно переработать."
+  },
+  suborder:{
+    name:"Подзаказ",
+    symmetric:false,
+    color:"#C8AE58",
+    desc:"Обратная роль в отношении заказа: тип выступает подзаказным по отношению к заказчику. Направление важно для корректного чтения связи."
+  },
+  revision:{
+    name:"Ревизия",
+    symmetric:false,
+    color:"#F0A06D",
+    desc:"Направленная связь контроля: ревизор замечает слабые места подревизного и способен на него влиять."
+  },
+  subrevision:{
+    name:"Подревизия",
+    symmetric:false,
+    color:"#D78368",
+    desc:"Обратная роль в отношении ревизии: тип выступает подревизным по отношению к ревизору. Направление важно для корректного чтения связи."
+  }
+};
+
+// Фильтры типов отношений: цветная метка совпадает с цветом связи на карте.
+const relationFiltersRoot=document.getElementById("relationFilters");
+if(relationFiltersRoot){
+  relationFiltersRoot.innerHTML='<button type="button" class="relation-filter active" data-rel="all" style="--rel-color:#c4b5fd"><span class="dot" style="background:#c4b5fd"></span>Все</button>'+Object.entries(REL).map(([key,rel])=>`<button type="button" class="relation-filter" data-rel="${key}" style="--rel-color:${rel.color}"><span class="dot" style="background:${rel.color}"></span>${rel.name}</button>`).join("");
+  relationFiltersRoot.addEventListener("click",event=>{
+    const button=event.target.closest("button[data-rel]");if(!button)return;
+    activeRelationFilter=button.dataset.rel==="all"?null:button.dataset.rel;
+    relationFiltersRoot.querySelectorAll(".relation-filter").forEach(item=>item.classList.toggle("active",item===button));
+    refreshEmphasis();
+  });
+}
+
+const TYPES = [
+  {id:"ILE",code:"ИЛЭ",name:"Дон Кихот",quadra:"alpha",desc:"Интуитивно-логический экстраверт. Генератор идей и возможностей, ищет новое, интересное и перспективное."},
+  {id:"SEI",code:"СЭИ",name:"Дюма",quadra:"alpha",desc:"Сенсорно-этический интроверт. Создаёт комфорт, умеет чувствовать людей и атмосферу, ценит уют и гармонию."},
+  {id:"ESE",code:"ЭСЭ",name:"Гюго",quadra:"alpha",desc:"Этико-сенсорный экстраверт. Эмоциональный организатор, умеет поднять настроение, объединить людей и позаботиться о быте."},
+  {id:"LII",code:"ЛИИ",name:"Робеспьер",quadra:"alpha",desc:"Логико-интуитивный интроверт. Аналитик и систематизатор, ищет ясные структуры, закономерности и объективную истину."},
+  {id:"EIE",code:"ЭИЭ",name:"Гамлет",quadra:"beta",desc:"Этико-интуитивный экстраверт. Эмоциональный лидер, чувствует настроения и перспективы, умеет вдохновлять и предупреждать об опасности."},
+  {id:"LSI",code:"ЛСИ",name:"Максим Горький",quadra:"beta",desc:"Логико-сенсорный интроверт. Строит порядок, правила и системы, ценит дисциплину, надёжность и защиту границ."},
+  {id:"SLE",code:"СЛЭ",name:"Жуков",quadra:"beta",desc:"Сенсорно-логический экстраверт. Стратег и организатор силы, видит ресурсы, умеет брать инициативу и достигать целей."},
+  {id:"IEI",code:"ИЭИ",name:"Есенин",quadra:"beta",desc:"Интуитивно-этический интроверт. Видит скрытые тенденции и настроение людей, создаёт образы, вдохновение и эмоциональную глубину."},
+  {id:"SEE",code:"СЭЭ",name:"Наполеон",quadra:"gamma",desc:"Сенсорно-этический экстраверт. Хозяин пространства, умеет влиять, расширять возможности и выстраивать полезные связи."},
+  {id:"ILI",code:"ИЛИ",name:"Бальзак",quadra:"gamma",desc:"Интуитивно-логический интроверт. Видит варианты развития событий, избегает бессмысленных затрат, ценит точность прогнозов."},
+  {id:"LIE",code:"ЛИЭ",name:"Джек Лондон",quadra:"gamma",desc:"Логико-интуитивный экстраверт. Предприниматель и технолог, ищет эффективные решения и новые возможности."},
+  {id:"ESI",code:"ЭСИ",name:"Драйзер",quadra:"gamma",desc:"Этико-сенсорный интроверт. Хранит личные ценности и отношения, тонко различает мораль, надёжность и искренность."},
+  {id:"LSE",code:"ЛСЭ",name:"Штирлиц",quadra:"delta",desc:"Логико-сенсорный экстраверт. Организатор процессов и быта, ценит работоспособность, порядок и практическую пользу."},
+  {id:"EII",code:"ЭИИ",name:"Достоевский",quadra:"delta",desc:"Этико-интуитивный интроверт. Понимает человеческие отношения и потенциал людей, стремится к нравственной ясности."},
+  {id:"IEE",code:"ИЭЭ",name:"Гексли",quadra:"delta",desc:"Интуитивно-этический экстраверт. Видит возможности и таланты людей, легко находит подход и раскрывает перспективы."},
+  {id:"SLI",code:"СЛИ",name:"Габен",quadra:"delta",desc:"Сенсорно-логический интроверт. Мастер комфорта и технологий, ценит удобство, качество, независимость и здравый смысл."}
+];
+
+const MATRIX = [
+["Т","Ду","Ак","Зе","Зак","Рев","Дел","Мир","Суп","Пог","Кв","Кон","Под","Подр","Род","Пд"],
+["Ду","Т","Зе","Ак","Рев","Зак","Мир","Дел","Пог","Суп","Кон","Кв","Подр","Под","Пд","Род"],
+["Ак","Зе","Т","Ду","Род","Пд","Под","Подр","Кв","Кон","Суп","Пог","Дел","Мир","Зак","Рев"],
+["Зе","Ак","Ду","Т","Пд","Род","Подр","Под","Кон","Кв","Пог","Суп","Мир","Дел","Рев","Зак"],
+["Под","Подр","Род","Пд","Т","Ду","Ак","Зе","Зак","Рев","Дел","Мир","Суп","Пог","Кв","Кон"],
+["Подр","Под","Пд","Род","Ду","Т","Зе","Ак","Рев","Зак","Мир","Дел","Пог","Суп","Кон","Кв"],
+["Дел","Мир","Зак","Рев","Ак","Зе","Т","Ду","Род","Пд","Под","Подр","Кв","Кон","Суп","Пог"],
+["Мир","Дел","Рев","Зак","Зе","Ак","Ду","Т","Пд","Род","Подр","Под","Кон","Кв","Пог","Суп"],
+["Суп","Пог","Кв","Кон","Под","Подр","Род","Пд","Т","Ду","Ак","Зе","Зак","Рев","Дел","Мир"],
+["Пог","Суп","Кон","Кв","Подр","Под","Пд","Род","Ду","Т","Зе","Ак","Рев","Зак","Мир","Дел"],
+["Кв","Кон","Суп","Пог","Дел","Мир","Зак","Рев","Ак","Зе","Т","Ду","Род","Пд","Под","Подр"],
+["Кон","Кв","Пог","Суп","Мир","Дел","Рев","Зак","Зе","Ак","Ду","Т","Пд","Род","Подр","Под"],
+["Зак","Рев","Дел","Мир","Суп","Пог","Кв","Кон","Под","Подр","Род","Пд","Т","Ду","Ак","Зе"],
+["Рев","Зак","Мир","Дел","Пог","Суп","Кон","Кв","Подр","Под","Пд","Род","Ду","Т","Зе","Ак"],
+["Род","Пд","Под","Подр","Кв","Кон","Суп","Пог","Дел","Мир","Зак","Рев","Ак","Зе","Т","Ду"],
+["Пд","Род","Подр","Под","Кон","Кв","Пог","Суп","Мир","Дел","Рев","Зак","Зе","Ак","Ду","Т"]
+];
+
+const CODE_TO_REL = {
+  "Т":"identity",
+  "Ду":"duality",
+  "Ак":"activation",
+  "Зе":"mirror",
+  "Род":"kindred",
+  "Пд":"semiDuality",
+  "Дел":"business",
+  "Мир":"mirage",
+  "Суп":"superego",
+  "Пог":"extinguishment",
+  "Кв":"quasiIdentity",
+  "Кон":"conflict",
+  "Зак":"order",
+  "Рев":"revision",
+  "Под":"suborder",
+  "Подр":"subrevision"
+};
+
+// Проекционная раскладка тессеракта (куб в кубе) по присланному образцу.
+// Внешний куб: Дон Кихот, Гексли, Гюго, Штирлиц, Наполеон, Гамлет, Джек Лондон, Жуков.
+// Внутренний куб: Дюма, Габен, Робеспьер, Достоевский, Драйзер, Максим, Бальзак, Есенин.
+const schlegelPositions = {
+  // Внешний куб: восемь вершин на ребре ±210.
+  ILE:{x:-210,y:210,z:210}, IEE:{x:210,y:210,z:210},
+  ESE:{x:-210,y:210,z:-210}, LSE:{x:210,y:210,z:-210},
+  SEE:{x:-210,y:-210,z:210}, EIE:{x:210,y:-210,z:210},
+  LIE:{x:-210,y:-210,z:-210}, SLE:{x:210,y:-210,z:-210},
+  // Внутренний куб: соответствующие восемь вершин на ребре ±95.
+  SEI:{x:-95,y:95,z:95}, SLI:{x:95,y:95,z:95},
+  LII:{x:-95,y:95,z:-95}, EII:{x:95,y:95,z:-95},
+  ESI:{x:-95,y:-95,z:95}, LSI:{x:95,y:-95,z:95},
+  ILI:{x:-95,y:-95,z:-95}, IEI:{x:95,y:-95,z:-95}
+};
+const nodes = TYPES.map(type=>({
+  ...type, color:QUADRAS[type.quadra].color, val:1,
+  fx:schlegelPositions[type.id].x, fy:schlegelPositions[type.id].y, fz:schlegelPositions[type.id].z
+}));
+
+// 16 типов дают C(16,2)=120 уникальных пар. Каждая пара создаётся ровно один раз.
+const links=[];
+for(let i=0;i<16;i++){
+  for(let j=i+1;j<16;j++){
+    const code=MATRIX[i][j];
+    const rel=CODE_TO_REL[code] || "conflict";
+    const directed=["Зак","Рев","Под","Подр"].includes(code);
+    links.push({
+      source:nodes[i].id, target:nodes[j].id, rel, relationCode:code, directed,
+      roleFrom:(code==="Зак"?"заказчик":code==="Под"?"подзаказный":code==="Рев"?"ревизор":code==="Подр"?"подревизный":null),
+      roleTo:(code==="Зак"?"подзаказный":code==="Под"?"заказчик":code==="Рев"?"подревизный":code==="Подр"?"ревизор":null)
+    });
+  }
+}
+
+let hoveredNodeId=null;
+let selectedNodeId=null;
+let selectedForCompare=[];
+let labelsVisible=true;
+let activeQuadra="all";
+let activeRelationFilter=null;
+let selectedRelationPair=null;
+let selectedPathIds=null;
+let selectedPathPairs=null;
+let routeModeActive=false;
+let routeSelection=[];
+let routeRelation="duality";
+let navigationOriginId=null;
+
+function linkEndpointId(endpoint) {
+  return endpoint && typeof endpoint === "object" ? endpoint.id : endpoint;
+}
+function isConnected(link, nodeId) {
+  const ids = selectedForCompare.length ? selectedForCompare : [nodeId || selectedNodeId || hoveredNodeId].filter(Boolean);
+  return ids.some(id => linkEndpointId(link.source) === id || linkEndpointId(link.target) === id);
+}
+function refreshEmphasis() {
+  const activeId = selectedNodeId || hoveredNodeId;
+  const activeIds = selectedForCompare.length ? selectedForCompare : (activeId ? [activeId] : []);
+  const inQuadra = node => activeQuadra === "all" || node.quadra === activeQuadra;
+  const connectedToActive = node => activeIds.length > 0 && links.some(link =>
+    (activeIds.includes(linkEndpointId(link.source)) && linkEndpointId(link.target) === node.id) ||
+    (activeIds.includes(linkEndpointId(link.target)) && linkEndpointId(link.source) === node.id)
+  );
+  const visibleNode = node => inQuadra(node) || activeIds.includes(node.id) || connectedToActive(node);
+  graph.nodeVisibility(visibleNode);
+  graph.linkVisibility(link => {
+    if (activeRelationFilter && link.rel !== activeRelationFilter) return false;
+    const sourceId = linkEndpointId(link.source);
+    const targetId = linkEndpointId(link.target);
+    const a = nodes.find(n => n.id === sourceId);
+    const b = nodes.find(n => n.id === targetId);
+    if (!a || !b) return false;
+    if (activeQuadra === "all") return true;
+    const bothInQuadra = a.quadra === activeQuadra && b.quadra === activeQuadra;
+    return bothInQuadra || activeIds.includes(sourceId) || activeIds.includes(targetId);
+  });
+  graph.linkWidth(link => activeIds.length ? (isConnected(link) ? 4.4 : 0.65) : (link.rel === "duality" ? 1.5 : 0.72));
+  graph.linkOpacity(link => activeIds.length ? (isConnected(link) ? 1 : 0.34) : 0.58);
+  graph.nodeColor(node => {
+    if (!activeIds.length) return node.color;
+    return activeIds.includes(node.id) || connectedToActive(node) ? node.color : "rgba(120,130,160,.12)";
+  });
+  graph.refresh();
+}
+
+const graphContainer = document.getElementById("graph");
+const graph = ForceGraph3D({
+    controlType: "orbit",
+    rendererConfig: { antialias: true, alpha: false, powerPreference: "high-performance" }
+  })(graphContainer)
+  .width(Math.max(320, window.innerWidth))
+  .height(Math.max(320, window.innerHeight))
+  .backgroundColor("#03040b")
+  .showNavInfo(false)
+  .nodeLabel(node=>`${node.name} · ${node.code}`)
+  .nodeColor(node=>node.color)
+  .nodeRelSize(7)
+  .nodeThreeObject(node => {
+    if (typeof SpriteText !== "function") return null;
+    const sprite = new SpriteText(`${node.name}, ${node.code}`);
+    sprite.color = "#f4f3ff";
+    sprite.textHeight = 6.2;
+    sprite.fontFace = "Inter, Segoe UI, sans-serif";
+    sprite.fontWeight = "500";
+    sprite.backgroundColor = "rgba(4,6,13,0.48)";
+    sprite.padding = 1.4;
+    sprite.borderRadius = 1.2;
+    sprite.visible = labelsVisible;
+    return sprite;
+  })
+  .nodeThreeObjectExtend(true)
+  .linkColor(link=>REL[link.rel].color)
+  // Лёгкий режим: все связи остаются видимыми; выбранные — сплошные и яркие.
+  // Для остальных используем по одной маленькой световой точке на связь,
+  // вместо 4–12 частиц на каждую линию (сильно снижает нагрузку).
+  .linkWidth(link => {
+    const active = selectedNodeId || hoveredNodeId;
+    return active && isConnected(link, active) ? 4.4 : (link.rel === "duality" ? 1.5 : 0.72);
+  })
+  .linkOpacity(link => {
+    const active = selectedNodeId || hoveredNodeId;
+    return active && isConnected(link, active) ? 1 : (active ? 0.34 : 0.58);
+  })
+  .linkDirectionalParticles(link => {
+    const active = selectedNodeId || hoveredNodeId;
+    return active && isConnected(link, active) ? 0 : 1;
+  })
+  .linkDirectionalParticleWidth(link => 1.8)
+  .linkDirectionalParticleColor(link => REL[link.rel].color)
+  .linkDirectionalArrowLength(link => {
+    const active = selectedNodeId || hoveredNodeId;
+    return active && isConnected(link, active) && link.directed ? 7 : 0;
+  })
+  .linkDirectionalArrowRelPos(1)
+  .linkDirectionalArrowColor(link=>REL[link.rel].color)
+  .linkThreeObject(link => {
+    if (typeof SpriteText !== "function") return null;
+    const sprite = new SpriteText(REL[link.rel].name);
+    sprite.color = REL[link.rel].color;
+    sprite.textHeight = 3.2;
+    sprite.fontFace = "Inter, Segoe UI, sans-serif";
+    sprite.backgroundColor = "rgba(4,6,13,0.68)";
+    sprite.padding = 0.7;
+    sprite.borderRadius = 0.7;
+    sprite.visible = labelsVisible;
+    return sprite;
+  })
+  .linkThreeObjectExtend(true)
+  .linkPositionUpdate((sprite, coords) => {
+    // ForceGraph может вызвать callback до создания link-sprite; не допускаем
+    // исключение, которое останавливает цикл рендеринга всей 3D-карты.
+    if (!sprite || !sprite.position || !coords) return;
+    const start = coords.start;
+    const end = coords.end;
+    if (!start || !end) return;
+    sprite.position.set(
+      (start.x + end.x) / 2,
+      (start.y + end.y) / 2,
+      (start.z + end.z) / 2
+    );
+  })
+  .onNodeClick(handleNodeClick)
+  .onLinkClick(openLink)
+  .onNodeHover(node => {
+    hoveredNodeId = node ? node.id : null;
+    refreshEmphasis();
+  })
+  .graphData({nodes,links});
+applyVisualSettings();
+sociOnResize();
+requestAnimationFrame(sociOnTick);
+
+// Зафиксированные координаты сохраняют схему «куб в кубе» при симуляции.
+nodes.forEach(node=>{ node.fx=schlegelPositions[node.id].x; node.fy=schlegelPositions[node.id].y; node.fz=schlegelPositions[node.id].z; });
+graph.d3Force("charge").strength(-220);
+
+sociOnStarted = true;
+graph.d3Force("charge").strength(-220);
+graph.d3Force("link").distance(105);
+
+// Initial camera framing: some browsers do not frame the graph reliably on first render.
+// Explicit camera framing avoids a blank-looking canvas when automatic framing
+// runs before the first force-simulation tick.
+requestAnimationFrame(() => {
+  graph.width(Math.max(320, window.innerWidth)).height(Math.max(320, window.innerHeight));
+  graph.cameraPosition({ x: 0, y: 0, z: 520 }, { x: 0, y: 0, z: 0 }, 0);
+  graph.zoomToFit(900, 120);
+});
+setTimeout(() => {
+  try { graph.zoomToFit(700, 120); } catch (e) { console.error("zoomToFit failed", e); }
+}, 1200);
+window.addEventListener("resize", () => {
+  graph.width(Math.max(320, window.innerWidth)).height(Math.max(320, window.innerHeight));
+});
+
+// Remove any temporary status text only after the renderer created its canvas.
+setTimeout(() => {
+  const canvas = graphContainer.querySelector("canvas");
+  if (!canvas) {
+    showStartupError(new Error("Библиотека загрузилась, но 3D canvas не создан. Возможная причина — WebGL отключён или недоступен в браузере."));
+  } else {
+    canvas.style.display = "block";
+    canvas.style.width = "100%";
+    canvas.style.height = "100%";
+  }
+}, 1800);
+
+function relationBetween(firstId,secondId){
+  const firstIndex=TYPES.findIndex(type=>type.id===firstId);
+  const secondIndex=TYPES.findIndex(type=>type.id===secondId);
+
+  const code=MATRIX[firstIndex][secondIndex];
+  const rel=CODE_TO_REL[code];
+
+  let direction="";
+
+  if(code==="Зак"){
+    direction=`${TYPES[firstIndex].name} — заказчик, ${TYPES[secondIndex].name} — подзаказный.`;
+  }
+
+  if(code==="Рев"){
+    direction=`${TYPES[firstIndex].name} — ревизор, ${TYPES[secondIndex].name} — подревизный.`;
+  }
+
+  if(code==="Под"){
+    direction=`${TYPES[secondIndex].name} — заказчик, ${TYPES[firstIndex].name} — подзаказный.`;
+  }
+
+  if(code==="Подр"){
+    direction=`${TYPES[secondIndex].name} — ревизор, ${TYPES[firstIndex].name} — подревизный.`;
+  }
+
+  return {code,rel,direction};
+}
+
+function renderRouteBar(){
+  const bar=document.getElementById("routeBar");
+  if(!routeModeActive){bar.classList.remove("open");return;}
+  const opts=Object.entries(REL).filter(([key])=>key!=='identity').map(([key,rel])=>`<option value="${key}" ${key===routeRelation?'selected':''}>${rel.name}</option>`).join('');
+  let body=`<div class="compare-head"><strong>Маршрут по сети</strong><button class="compare-clear" id="routeExit">Закрыть</button></div><div class="compare-hint">Выберите тип отношения и нажмите на две точки. Карта проверит, соединены ли они напрямую связью выбранного типа.</div><div class="route-row"><label for="routeRelationSelect">Связи:</label><select id="routeRelationSelect">${opts}</select></div>`;
+  if(routeSelection.length===0) body+=`<div class="compare-hint">Шаг 1 из 2: выберите начальный тип на карте.</div>`;
+  if(routeSelection.length===1){const a=TYPES.find(t=>t.id===routeSelection[0]);body+=`<div class="route-step" style="--route-color:${REL[routeRelation].color}">Старт: <b>${a.name} · ${a.code}</b></div><div class="compare-hint">Шаг 2 из 2: выберите конечный тип.</div>`;}
+  if(routeSelection.length===2){const a=TYPES.find(t=>t.id===routeSelection[0]),b=TYPES.find(t=>t.id===routeSelection[1]);body+=`<div class="route-step" style="--route-color:${REL[routeRelation].color}">От: <b>${a.name} · ${a.code}</b></div><div class="route-step" style="--route-color:${REL[routeRelation].color}">До: <b>${b.name} · ${b.code}</b></div><button class="nav-action" id="routeAgain">Выбрать другие точки</button>`;}
+  bar.innerHTML=body;bar.classList.add('open');
+  document.getElementById('routeRelationSelect').onchange=e=>{routeRelation=e.target.value;activeRelationFilter=routeRelation;document.querySelectorAll('#relationFilters .relation-filter').forEach(item=>item.classList.toggle('active',item.dataset.rel===routeRelation));routeSelection=[];selectedPathIds=null;selectedPathPairs=null;renderRouteBar();refreshEmphasis();};
+  document.getElementById('routeExit').onclick=()=>{routeModeActive=false;routeSelection=[];selectedPathIds=null;selectedPathPairs=null;selectedRelationPair=null;selectedNodeId=null;activeRelationFilter=null;document.getElementById('routeMode').classList.remove('active');document.querySelectorAll('#relationFilters .relation-filter').forEach(item=>item.classList.toggle('active',item.dataset.rel==='all'));renderRouteBar();refreshEmphasis();};
+  const again=document.getElementById('routeAgain');if(again)again.onclick=()=>{routeSelection=[];selectedPathIds=null;selectedPathPairs=null;renderRouteBar();refreshEmphasis();};
+}
+function findRelationPath(startId,endId,relKey){
+  const adjacency=new Map(nodes.map(n=>[n.id,[]]));
+  for(const l of links){if(l.rel!==relKey)continue;const a=linkEndpointId(l.source),b=linkEndpointId(l.target);adjacency.get(a)?.push(b);adjacency.get(b)?.push(a);}
+  const queue=[startId],prev=new Map([[startId,null]]);
+  while(queue.length){const current=queue.shift();if(current===endId)break;for(const next of (adjacency.get(current)||[])){if(!prev.has(next)){prev.set(next,current);queue.push(next);}}}
+  if(!prev.has(endId))return null;const path=[];for(let at=endId;at!==null;at=prev.get(at))path.push(at);return path.reverse();
+}
+function chooseRouteNode(node){
+  if(!routeModeActive)return false;
+  document.getElementById("panel").classList.remove("open");
+  if(routeSelection.length===0){routeSelection=[node.id];selectedNodeId=null;selectedRelationPair=null;selectedPathIds=null;selectedPathPairs=null;}
+  else if(routeSelection.length===1){if(routeSelection[0]===node.id)return true;routeSelection.push(node.id);const path=findRelationPath(routeSelection[0],routeSelection[1],routeRelation);if(path){selectedPathIds=path;selectedPathPairs=[];for(let i=0;i<path.length-1;i++)selectedPathPairs.push([path[i],path[i+1]].sort());const last=nodes.find(n=>n.id===path[path.length-1]);if(last)focusNode(last);document.getElementById('routeBar').dataset.path=path.join(',');}
+    else{selectedPathIds=[routeSelection[0],routeSelection[1]];selectedPathPairs=[];document.getElementById('routeBar').dataset.path='none';}
+  }else{routeSelection=[node.id];selectedPathIds=null;selectedPathPairs=null;}
+  refreshEmphasis();renderRouteBar();
+  if(routeSelection.length===2){const pathText=document.getElementById('routeBar').dataset.path;if(pathText==='none'){document.querySelector('#routeBar .compare-hint').textContent='Прямая связь выбранного типа между этими типами не найдена.';}else if(pathText){const ids=pathText.split(',');const steps=ids.map((id,i)=>{const t=TYPES.find(x=>x.id===id);return `<div class="route-step" style="--route-color:${REL[routeRelation].color}">${i+1}. <b>${t.name} · ${t.code}</b></div>`;}).join('');document.querySelector('#routeBar .compare-hint').insertAdjacentHTML('afterend',`<div class="route-result"><b>Найдено звеньев: ${ids.length-1}</b>${steps}</div>`);}}
+  return true;
+}
+
+function handleNodeClick(node){
+  if(chooseRouteNode(node))return;
+  const compareActive=document.getElementById("compareMode").classList.contains("active");
+  if(compareActive){handleCompareClick(node);return;}
+  selectedForCompare=[];
+  selectedRelationPair=null;
+  navigationOriginId=node.id;
+  selectedNodeId=node.id;
+  refreshEmphasis();
+  openType(node);
+}
+
+function openType(node){
+  const quadra=QUADRAS[node.quadra];
+
+  document.getElementById("panel").classList.add("open");
+  document.getElementById("pKicker").textContent=`Квадра ${quadra.name}`;
+  document.getElementById("pTitle").textContent=`${node.name} · ${node.code}`;
+  document.getElementById("pTags").innerHTML=
+    `<span class="tag">${quadra.name}</span>`+
+    `<span class="tag">${node.code}</span>`;
+
+  document.getElementById("pDescription").textContent=node.desc;
+
+  const items=[];
+
+  TYPES.forEach(other=>{
+    if(other.id===node.id) return;
+
+    const relation=relationBetween(node.id,other.id);
+
+    items.push(
+      `<button type="button" class="relation-nav-item" data-source="${node.id}" data-target="${other.id}" style="--rel-color:${REL[relation.rel].color}">
+        <span><span class="rel-name">${REL[relation.rel].name}</span><br><span class="rel-target">${other.name} · ${other.code}</span></span><span class="rel-arrow">↗</span>
+      </button>`
+    );
+  });
+
+  document.getElementById("pRelations").innerHTML=`<div class="relation-nav-list">${items.join("")}</div><div class="nav-actions"><button class="nav-action" id="clearRelationFocus">Снять выделение связи</button></div>`;
+  focusNode(node);
+}
+
+function openLink(link){
+  // В режимах сравнения и маршрута клик по линии только подсвечивает связь;
+  // не открываем карточку поверх рабочего окна и не запускаем синхронизацию размеров.
+  if(document.getElementById("compareMode")?.classList.contains("active") || routeModeActive){
+    const a=typeof link.source==="object"?link.source.id:link.source;
+    const b=typeof link.target==="object"?link.target.id:link.target;
+    selectedRelationPair=[a,b].sort(); selectedNodeId=null; hoveredNodeId=null;
+    refreshEmphasis(); return;
+  }
+  const first=typeof link.source==="object"
+    ? link.source
+    : nodes.find(node=>node.id===link.source);
+
+  const second=typeof link.target==="object"
+    ? link.target
+    : nodes.find(node=>node.id===link.target);
+
+  const relation=relationBetween(first.id,second.id);
+  selectedRelationPair=[first.id,second.id].sort();
+  navigationOriginId=first.id;
+  selectedNodeId=null;
+  const fx=Number.isFinite(first.x)?first.x:first.fx||0, fy=Number.isFinite(first.y)?first.y:first.fy||0, fz=Number.isFinite(first.z)?first.z:first.fz||0;
+  const sx=Number.isFinite(second.x)?second.x:second.fx||0, sy=Number.isFinite(second.y)?second.y:second.fy||0, sz=Number.isFinite(second.z)?second.z:second.fz||0;
+  graph.cameraPosition({x:(fx+sx)/2,y:(fy+sy)/2,z:(fz+sz)/2+210},{x:(fx+sx)/2,y:(fy+sy)/2,z:(fz+sz)/2},700);
+  refreshEmphasis();
+
+  document.getElementById("panel").classList.add("open");
+  document.getElementById("pKicker").textContent="Интертипное отношение";
+  document.getElementById("pTitle").textContent=REL[relation.rel].name;
+
+  document.getElementById("pTags").innerHTML=
+    `<span class="tag" style="border-color:${REL[relation.rel].color};color:${REL[relation.rel].color}">${first.name}</span>`+
+    `<span class="tag" style="border-color:${REL[relation.rel].color};color:${REL[relation.rel].color}">${second.name}</span>`;
+
+  document.getElementById("pDescription").textContent=REL[relation.rel].desc;
+
+  document.getElementById("pRelations").innerHTML=(relation.direction
+    ? `<p>${relation.direction}</p>`
+    : "<p>Симметричное отношение: оба партнёра находятся в равной позиции.</p>")+
+    `<div class="nav-actions"><button class="nav-action" data-open-type="${first.id}">Открыть ${first.name}</button><button class="nav-action" data-open-type="${second.id}">Перейти к ${second.name}</button><button class="nav-action" id="clearRelationFocus">Показать все связи</button></div>`;
+}
+
+function handleCompareClick(node){
+  if(selectedForCompare.includes(node.id)){
+    selectedForCompare=selectedForCompare.filter(id=>id!==node.id);
+  } else {
+    selectedForCompare.push(node.id);
+    if(selectedForCompare.length>2) selectedForCompare=selectedForCompare.slice(-2);
+  }
+  // Сравнение должно подсвечивать только текущую пару, а не старую связь/маршрут.
+  selectedNodeId=null;
+  hoveredNodeId=null;
+  selectedRelationPair=null;
+  selectedPathIds=null;
+  selectedPathPairs=null;
+  navigationOriginId=null;
+  refreshEmphasis();
+  renderCompareBar();
+}
+
+function renderCompareBar(){
+  const bar=document.getElementById("compareBar");
+  if(!document.getElementById("compareMode").classList.contains("active")){
+    bar.classList.remove("open"); return;
+  }
+  if(selectedForCompare.length===0){
+    // До выбора первого типа окно сравнения не показываем.
+    bar.innerHTML='';
+    bar.classList.remove("open");
+    return;
+  } else if(selectedForCompare.length===1){
+    const a=TYPES.find(type=>type.id===selectedForCompare[0]);
+    bar.innerHTML=`<div class="compare-head"><strong>Сравнение типов · 1 из 2</strong><button class="compare-clear" id="clearCompare">Сбросить выбор</button></div><div class="compare-type"><h4>${a.name} · ${a.code}</h4><p><b>Квадра:</b> ${QUADRAS[a.quadra].name}</p><p>${a.desc}</p></div><div class="compare-hint" style="margin-top:8px">Теперь выберите второй тип.</div>`;
+    bar.classList.add("open");
+  } else {
+    const a=TYPES.find(type=>type.id===selectedForCompare[0]);
+    const b=TYPES.find(type=>type.id===selectedForCompare[1]);
+    const relation=relationBetween(a.id,b.id);
+    const rel=REL[relation.rel]||{name:relation.rel,color:'#c4b5fd',desc:''};
+    const sameQuadra=a.quadra===b.quadra;
+    const profile=TYPES.filter(t=>t.id!==a.id&&t.id!==b.id).map(t=>({type:t,ra:relationBetween(a.id,t.id),rb:relationBetween(b.id,t.id)}));
+    const sameProfile=profile.filter(x=>x.ra.code===x.rb.code);
+    const differentProfile=profile.filter(x=>x.ra.code!==x.rb.code);
+    const profileRows=profile.map(x=>`<div class="profile-row"><span>${x.type.name} · ${x.type.code}</span><span class="profile-pair"><i style="color:${(REL[x.ra.rel]||{}).color||'#c4b5fd'}">${(REL[x.ra.rel]||{}).name||x.ra.rel}</i><b>${x.ra.code===x.rb.code?'=':'≠'}</b><i style="color:${(REL[x.rb.rel]||{}).color||'#c4b5fd'}">${(REL[x.rb.rel]||{}).name||x.rb.rel}</i></span></div>`).join('');
+    bar.innerHTML=`<div class="compare-head"><strong>Сравнение типов · готово</strong><button class="compare-clear" id="clearCompare">Выбрать заново</button></div>
+      <div class="compare-columns"><div class="compare-type"><h4>${a.name} · ${a.code}</h4><p><b>Квадра:</b> ${QUADRAS[a.quadra].name}</p><p>${a.desc}</p></div><div class="compare-type"><h4>${b.name} · ${b.code}</h4><p><b>Квадра:</b> ${QUADRAS[b.quadra].name}</p><p>${b.desc}</p></div></div>
+      <div class="compare-relation" style="border-color:${rel.color}55"><b style="color:${rel.color}">${rel.name}</b><br>${relation.direction||'Симметричное интертипное отношение.'} ${rel.desc||''}</div>
+      <div class="profile-summary"><div class="profile-stat"><strong>${sameQuadra?'Да':'Нет'}</strong><span>одна квадра</span></div><div class="profile-stat"><strong>${sameProfile.length} / ${profile.length}</strong><span>совпадение профиля</span></div><div class="profile-stat"><strong>${differentProfile.length}</strong><span>отличия профиля</span></div></div>
+      <details class="profile-details"><summary>Сравнить связи с остальными 14 типами</summary><div class="compare-hint" style="margin:7px 0 9px">«Совпадение профиля» — число третьих типов, для которых код отношения к обоим выбранным типам одинаков. «Отличия профиля» — число типов с разными кодами. Эти показатели в сумме дают 14 и описывают структуру сети, а не психологическую совместимость.</div><div class="profile-list">${profileRows}</div></details>`;
+    bar.classList.add("open");
+  }
+  const clear=document.getElementById('clearCompare');
+  if(clear)clear.onclick=()=>{selectedForCompare=[];selectedNodeId=null;selectedRelationPair=null;selectedPathIds=null;selectedPathPairs=null;navigationOriginId=null;refreshEmphasis();renderCompareBar();};
+}
+function focusNode(node){
+  const x = Number.isFinite(node.x) ? node.x : node.fx;
+  const y = Number.isFinite(node.y) ? node.y : node.fy;
+  const z = Number.isFinite(node.z) ? node.z : node.fz;
+  const length = Math.hypot(x || 0, y || 0, z || 0) || 1;
+  const distance = 210;
+  const ratio = distance / length;
+  graph.cameraPosition(
+    { x:(x || 0)*ratio, y:(y || 0)*ratio, z:(z || 0)*ratio },
+    { x:x || 0, y:y || 0, z:z || 0 },
+    900
+  );
+}
+
+// Навигация по сети: выбор отношения выделяет конкретное ребро, а кнопка ведёт к соседнему типу.
+document.getElementById("pRelations").addEventListener("click",event=>{
+  const relationButton=event.target.closest("[data-source][data-target]");
+  if(relationButton){
+    const source=nodes.find(n=>n.id===relationButton.dataset.source);
+    const target=nodes.find(n=>n.id===relationButton.dataset.target);
+    if(!source||!target)return;
+    navigationOriginId=source.id;
+    selectedNodeId=null;selectedForCompare=[];
+    selectedRelationPair=[source.id,target.id].sort();
+    refreshEmphasis();
+    openLink(links.find(l=>{const a=linkEndpointId(l.source),b=linkEndpointId(l.target);return (a===source.id&&b===target.id)||(a===target.id&&b===source.id);}));
+    return;
+  }
+  const openTypeButton=event.target.closest("[data-open-type]");
+  if(openTypeButton){const target=nodes.find(n=>n.id===openTypeButton.dataset.openType);if(target){selectedRelationPair=null;selectedPathIds=null;selectedPathPairs=null;selectedNodeId=target.id;selectedForCompare=[];refreshEmphasis();openType(target);}return;}
+  if(event.target.closest("#clearRelationFocus")){selectedRelationPair=null;selectedForCompare=[];if(navigationOriginId){selectedNodeId=navigationOriginId;const origin=nodes.find(n=>n.id===navigationOriginId);if(origin)openType(origin);}else{selectedNodeId=null;document.getElementById("panel").classList.remove("open");}refreshEmphasis();}
+});
+
+const searchInput=document.getElementById("search");
+const resultsBox=document.getElementById("searchResults");
+
+searchInput.addEventListener("input",()=>{
+  const query=searchInput.value.trim().toLowerCase();
+
+  if(!query){
+    resultsBox.style.display="none";
+    return;
+  }
+
+  const matches=TYPES.filter(type=>
+    type.name.toLowerCase().includes(query)||
+    type.code.toLowerCase().includes(query)
+  ).slice(0,8);
+
+  resultsBox.innerHTML=matches.map(type=>
+    `<button data-id="${type.id}">${type.name} · ${type.code}</button>`
+  ).join("");
+
+  resultsBox.style.display=matches.length?"block":"none";
+});
+
+resultsBox.addEventListener("click",event=>{
+  const button=event.target.closest("button");
+
+  if(!button) return;
+
+  const node=nodes.find(item=>item.id===button.dataset.id);
+
+  searchInput.value="";
+  resultsBox.style.display="none";
+
+  if(document.getElementById("compareMode").classList.contains("active"))handleCompareClick(node);
+  else {selectedRelationPair=null;navigationOriginId=node.id;selectedNodeId=node.id;refreshEmphasis();openType(node);}
+});
+
+document.addEventListener("click",event=>{
+  if(
+    !event.target.closest("#search")&&
+    !event.target.closest("#searchResults")
+  ){
+    resultsBox.style.display="none";
+  }
+});
+
+document.querySelectorAll(".chip[data-filter]").forEach(button=>{
+  button.onclick=()=>{
+    document.querySelectorAll(".chip[data-filter]").forEach(item=>{
+      item.classList.remove("active");
+    });
+
+    button.classList.add("active");
+
+    activeQuadra=button.dataset.filter;
+    refreshEmphasis();
+  };
+});
+
+document.getElementById("routeMode").onclick=function(){
+  routeModeActive=!routeModeActive;this.classList.toggle("active",routeModeActive);
+  if(routeModeActive){document.getElementById("panel").classList.remove("open","mode-sized");["left","top","width","height","right","bottom"].forEach(k=>document.getElementById("panel").style.removeProperty(k));document.getElementById("compareMode").classList.remove("active");document.getElementById("compareBar").classList.remove("open");document.body.classList.remove("compare-active");selectedForCompare=[];selectedNodeId=null;selectedRelationPair=null;routeSelection=[];selectedPathIds=null;selectedPathPairs=null;if(activeRelationFilter && activeRelationFilter!=="identity")routeRelation=activeRelationFilter;else routeRelation="duality";activeRelationFilter=routeRelation;document.querySelectorAll("#relationFilters .relation-filter").forEach(item=>item.classList.toggle("active",item.dataset.rel===routeRelation));renderRouteBar();}else{routeSelection=[];selectedPathIds=null;selectedPathPairs=null;document.getElementById("routeBar").classList.remove("open");activeRelationFilter=null;document.querySelectorAll("#relationFilters .relation-filter").forEach(item=>item.classList.toggle("active",item.dataset.rel==="all"));}
+  refreshEmphasis();
+};
+
+document.getElementById("compareMode").onclick=function(){
+  routeModeActive=false;routeSelection=[];selectedPathIds=null;selectedPathPairs=null;document.getElementById("routeMode").classList.remove("active");document.getElementById("routeBar").classList.remove("open");
+  this.classList.toggle("active");
+  document.body.classList.toggle("compare-active", this.classList.contains("active"));
+  if(this.classList.contains("active")){
+    document.getElementById("panel").classList.remove("open","mode-sized");["left","top","width","height","right","bottom"].forEach(k=>document.getElementById("panel").style.removeProperty(k));
+    selectedNodeId=null;hoveredNodeId=null;selectedForCompare=[];
+    selectedRelationPair=null;selectedPathIds=null;selectedPathPairs=null;navigationOriginId=null;
+    document.getElementById("panel").classList.remove("open");
+    renderCompareBar();
+  }else{
+    selectedForCompare=[];selectedRelationPair=null;selectedPathIds=null;selectedPathPairs=null;
+    document.getElementById("compareBar").classList.remove("open");
+  }
+  refreshEmphasis();
+};
+
+document.getElementById("reset").onclick=()=>{
+  selectedNodeId=null;
+  hoveredNodeId=null;
+  selectedForCompare=[];
+  selectedRelationPair=null;selectedPathIds=null;selectedPathPairs=null;routeModeActive=false;routeSelection=[];document.getElementById("routeMode").classList.remove("active");document.getElementById("routeBar").classList.remove("open");navigationOriginId=null;
+  document.getElementById("compareMode").classList.remove("active");
+  document.body.classList.remove("compare-active");
+  activeQuadra="all";
+  activeRelationFilter=null;
+  const relationAll=document.querySelector('#relationFilters [data-rel="all"]');
+  document.querySelectorAll('#relationFilters .relation-filter').forEach(item=>item.classList.toggle('active',item===relationAll));
+  refreshEmphasis();
+  document.getElementById("compareBar").classList.remove("open");
+
+  document.querySelectorAll(".chip[data-filter]").forEach(item=>{
+    item.classList.remove("active");
+  });
+
+  document.querySelector('[data-filter="all"]').classList.add("active");
+
+  graph.refresh();
+  graph.zoomToFit(800,80);
+};
+
+document.getElementById("close").addEventListener("click", event => {
+  event.preventDefault();
+  event.stopPropagation();
+  document.getElementById("panel").classList.remove("open");
+  // Закрытие карточки снимает связь/маршрут и акцент выбранного узла.
+  selectedRelationPair=null;
+  selectedPathIds=null;
+  selectedPathPairs=null;
+  selectedNodeId=null;
+  hoveredNodeId=null;
+  navigationOriginId=null;
+  refreshEmphasis();
+});
+
+graph.onBackgroundClick(()=>{
+  const compareActive=document
+    .getElementById("compareMode")
+    .classList.contains("active");
+
+  if(compareActive){selectedForCompare=[];selectedNodeId=null;refreshEmphasis();renderCompareBar();}
+});
+
+
+// SociON v38: animated constellation layer and a seeded-by-button cosmic randomizer.
+(()=>{
+ const canvas=document.getElementById('cosmicCanvas');
+ if(!canvas)return;
+ const ctx=canvas.getContext('2d');
+ const panel=document.getElementById('workspacePanel');
+ const collapse=document.getElementById('workspaceCollapse');
+ const chaosControl=document.getElementById('cosmicChaosControl');
+ const chaosValue=document.getElementById('cosmicChaosValue');
+ const randomize=document.getElementById('cosmicRandomize');
+ const palettes=[
+  ['rgba(104,74,220,','rgba(49,151,206,','rgba(219,87,177,'],
+  ['rgba(73,109,222,','rgba(71,197,191,','rgba(169,104,255,'],
+  ['rgba(180,80,219,','rgba(75,130,230,','rgba(244,151,190,'],
+  ['rgba(67,150,196,','rgba(128,101,235,','rgba(222,173,113,'],
+  ['rgba(132,86,225,','rgba(47,174,164,','rgba(233,111,146,']
+ ];
+ let palette=palettes[0],chaos=45,stars=[],w=0,h=0,dpr=1,last=0,seed=9137;
+ const rand=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
+ function resize(){dpr=Math.min(devicePixelRatio||1,2);w=innerWidth;h=innerHeight;canvas.width=Math.max(1,Math.floor(w*dpr));canvas.height=Math.max(1,Math.floor(h*dpr));canvas.style.width=w+'px';canvas.style.height=h+'px';ctx.setTransform(dpr,0,0,dpr,0,0);buildStars();}
+ function buildStars(){seed=(seed^Math.floor(w*13+h*31+chaos*97))>>>0;const count=Math.round(34+chaos*1.08);stars=[];for(let i=0;i<count;i++){stars.push({x:rand()*w,y:rand()*h,depth:.2+rand()*.8,r:.35+rand()*1.25,phase:rand()*Math.PI*2,twinkle:.35+rand()*.65,drift:.15+rand()*.7});}}
+ function applyPalette(){const n=palette;document.getElementById('nebula').style.background=`radial-gradient(ellipse at 23% 34%,${n[0]}0.19),transparent 36%),radial-gradient(ellipse at 72% 65%,${n[1]}0.15),transparent 38%),radial-gradient(ellipse at 54% 48%,${n[2]}0.11),transparent 32%)`;
+ }
+ function draw(now){if(!ctx)return;const dt=last?Math.min(.05,(now-last)/1000):0;last=now;ctx.clearRect(0,0,w,h);const t=now*.00012*Math.max(.15,(Number(document.getElementById('nebulaSpeedControl')?.value||100)/100));
+  const moved=stars.map(s=>({x:(s.x+Math.sin(t*s.drift+s.phase)*7+w)%w,y:(s.y+Math.cos(t*s.drift*.7+s.phase)*5+h)%h,s}));
+  // Connections become more numerous as the chaos slider rises, but remain softly luminous.
+  const threshold=38+chaos*.78;ctx.lineWidth=.65;
+  for(let i=0;i<moved.length;i++){let nearest=[];for(let j=i+1;j<moved.length;j++){const dx=moved[i].x-moved[j].x,dy=moved[i].y-moved[j].y,d=Math.hypot(dx,dy);if(d<threshold)nearest.push({j,d});}nearest.sort((a,b)=>a.d-b.d);const maxLinks=Math.round(1+chaos/36);for(const e of nearest.slice(0,maxLinks)){const a=moved[i],b=moved[e.j],alpha=(1-e.d/threshold)*(.035+chaos*.0011);ctx.strokeStyle=palette[i%3]+Math.min(.25,alpha)+')';ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}}
+  for(let i=0;i<moved.length;i++){const p=moved[i],s=p.s,tw=.45+.55*Math.sin(now*.001*(.4+s.drift)+s.phase)*.5;ctx.globalAlpha=(.18+tw*.48)*s.twinkle;ctx.fillStyle=i%5===0?'#e9e4ff':'#d6e0ff';ctx.shadowColor=palette[i%3]+'0.75)';ctx.shadowBlur=chaos>25?2+chaos*.035:0;ctx.beginPath();ctx.arc(p.x,p.y,s.r*(.8+tw*.4),0,Math.PI*2);ctx.fill();if(chaos>68&&i%13===0){ctx.globalAlpha=.18+tw*.2;ctx.lineWidth=.6;ctx.beginPath();ctx.moveTo(p.x-4,p.y);ctx.lineTo(p.x+4,p.y);ctx.moveTo(p.x,p.y-4);ctx.lineTo(p.x,p.y+4);ctx.strokeStyle='#e6dcff';ctx.stroke();}}
+  ctx.globalAlpha=1;ctx.shadowBlur=0;requestAnimationFrame(draw);
+ }
+ collapse?.addEventListener('click',()=>{const closed=panel.classList.contains('collapsed');collapse.textContent='×';collapse.setAttribute('aria-label',closed?'Развернуть настройки':'Свернуть настройки');});
+ chaosControl?.addEventListener('input',()=>{chaos=Number(chaosControl.value);chaosValue.textContent=chaos+'%';buildStars();});
+ randomize?.addEventListener('click',()=>{seed=(Math.random()*0xffffffff)>>>0;palette=palettes[Math.floor(Math.random()*palettes.length)];applyPalette();buildStars();const neb=document.getElementById('nebula');neb.style.animation='none';void neb.offsetWidth;const speed=Number(document.getElementById('nebulaSpeedControl')?.value||100);neb.style.animation='nebulaSeamless '+(speed===0?'0s':(14/(speed/100))+'s')+' linear infinite';});
+ window.addEventListener('resize',resize,{passive:true});resize();applyPalette();requestAnimationFrame(draw);
+})();
+
+
+// v45: keep the settings panel between its fixed top edge and the legend's top edge.
+(function(){
+  const settings=document.getElementById('workspacePanel');
+  const legend=document.getElementById('legend');
+  if(!settings||!legend)return;
+  function alignSettingsToLegend(){
+    if(window.innerWidth<=760){settings.style.bottom='auto';return;}
+    settings.style.top='176px';
+    if(settings.classList.contains('collapsed')){settings.style.bottom='auto';settings.style.maxHeight='none';return;}
+    const legendRect=legend.getBoundingClientRect();
+    const top=176;
+    const gap=12;
+    const bottom=Math.max(16,window.innerHeight-legendRect.top+gap);
+    settings.style.bottom=bottom+'px';
+    settings.style.maxHeight='none';
+  }
+  window.addEventListener('resize',alignSettingsToLegend,{passive:true});
+  const collapse=document.getElementById('workspaceCollapse');
+  if(collapse)collapse.addEventListener('click',()=>requestAnimationFrame(alignSettingsToLegend));
+  if(window.ResizeObserver){new ResizeObserver(alignSettingsToLegend).observe(legend);}
+  requestAnimationFrame(alignSettingsToLegend);
+})();
+
+
+
+// SociON v49 — attempt ambient autoplay on entry + transparent iOS-style switch.
+(()=>{
+  const toggle=document.getElementById('ambientRadioToggle');
+  const station=document.getElementById('ambientRadioStation');
+  const volume=document.getElementById('ambientVolume');
+  const volumeValue=document.getElementById('ambientVolumeValue');
+  const audio=document.getElementById('ambientRadioAudio');
+  const status=document.getElementById('ambientRadioStatus');
+  if(!toggle||!station||!volume||!audio||!status)return;
+  const streams={
+    asp:{urls:['https://radio.stereoscenic.com/asp-s','https://radio.stereoscenic.com/asp-h'],label:'Ambient Sleeping Pill'},
+    mellow:{urls:['https://stream.radioparadise.com/mellow-128','https://stream.radioparadise.com/mellow-192'],label:'Radio Paradise · Mellow Mix'}
+  };
+  let enabled=false,attemptIndex=0,attemptToken=0,autoStart=false;
+  function setStatus(message){status.textContent=message;}
+  function syncToggle(){
+    toggle.setAttribute('aria-pressed',String(enabled));
+    toggle.setAttribute('aria-checked',String(enabled));
+    toggle.setAttribute('aria-label','Ambient-радио: '+(enabled?'включено':'выключено'));
+    const label=toggle.querySelector('.switch-state');if(label)label.textContent=enabled?'ON':'OFF';
+  }
+  function playCurrent(isAuto=false){
+    const chosen=streams[station.value]||streams.asp;
+    const token=++attemptToken;attemptIndex=0;autoStart=isAuto;
+    function tryUrl(){
+      if(token!==attemptToken||!enabled)return;
+      if(attemptIndex>=chosen.urls.length){setStatus(isAuto?'Автозапуск заблокирован или поток недоступен — нажмите переключатель OFF/ON либо выберите другую станцию.':'Поток не запустился. Проверьте соединение или попробуйте другую станцию.');return;}
+      const url=chosen.urls[attemptIndex++];
+      audio.pause();audio.src=url;audio.load();audio.volume=Math.max(0,Math.min(1,Number(volume.value)/100));
+      setStatus((isAuto?'Автозапуск: ':'Подключение к ')+(isAuto?chosen.label:chosen.label+'…'));
+      const result=audio.play();
+      if(result&&typeof result.then==='function')result.then(()=>{
+        if(token===attemptToken)setStatus('Играет: '+chosen.label);
+      }).catch(()=>{
+        if(token!==attemptToken)return;
+        if(attemptIndex<chosen.urls.length){setStatus('Проверяю резервный поток…');}
+        else setStatus(isAuto?'Браузер мог заблокировать автозапуск звука. Нажмите OFF, затем ON.':'Поток не запустился. Проверьте соединение или выберите другую станцию.');
+      });
+    }
+    tryUrl();
+  }
+  toggle.addEventListener('click',()=>{
+    enabled=!enabled;syncToggle();
+    if(enabled)playCurrent(false);
+    else{attemptToken++;audio.pause();audio.removeAttribute('src');audio.load();setStatus('Выключено.');}
+  });
+  station.addEventListener('change',()=>{
+    if(enabled)playCurrent(false);
+    else setStatus('Выбрана станция: '+(streams[station.value]||streams.asp).label+'. Выключено.');
+  });
+  volume.addEventListener('input',()=>{audio.volume=Number(volume.value)/100;volumeValue.textContent=volume.value+'%';});
+  audio.addEventListener('playing',()=>{if(enabled)setStatus('Играет: '+(streams[station.value]||streams.asp).label);});
+  audio.addEventListener('error',()=>{
+    if(!enabled)return;
+    const chosen=streams[station.value]||streams.asp;
+    if(attemptIndex<chosen.urls.length){
+      setStatus('Пробую резервный поток…');
+      const token=attemptToken,url=chosen.urls[attemptIndex++];audio.src=url;audio.load();audio.volume=Number(volume.value)/100;
+      const result=audio.play();if(result&&typeof result.catch==='function')result.catch(()=>{
+        if(token===attemptToken&&attemptIndex>=chosen.urls.length)setStatus(autoStart?'Браузер мог заблокировать автозапуск звука. Нажмите OFF, затем ON.':'Поток не запустился. Проверьте соединение или выберите другую станцию.');
+      });
+    }else setStatus(autoStart?'Автозапуск не удался: браузер блокирует звук или поток недоступен. Нажмите OFF/ON либо откройте сайт станции.':'Не удалось загрузить поток. Попробуйте другую станцию.');
+  });
+  volumeValue.textContent=volume.value+'%';
+  syncToggle();
+  // Start in OFF state. Playback begins only after the user turns the switch ON.
+  audio.pause();audio.removeAttribute('src');audio.load();setStatus('Выключено.');
+})();
+</script>
+
+
+
+<style id="socion-v50-compare-dynamic-size">
+@media (min-width:761px){
+  body.compare-active #compareBar.open{
+    position:fixed!important;left:auto;right:16px;top:auto;bottom:auto;
+    width:auto!important;max-width:none!important;max-height:none!important;
+    box-sizing:border-box;overflow-y:auto;overflow-x:hidden;
+  }
+}
+</style>
+<script id="socion-v50-compare-dynamic-size-js">
+(()=>{
+ const legend=document.getElementById('legend');
+ const bar=document.getElementById('compareBar');
+ if(!legend||!bar)return;
+ function alignCompare(){
+   if(window.innerWidth<=760 || !document.body.classList.contains('compare-active') || !bar.classList.contains('open')){
+     bar.style.top='';bar.style.height='';bar.style.left='';bar.style.right='';bar.style.bottom='';
+     return;
+   }
+   const r=legend.getBoundingClientRect();
+   const top=Math.max(12,r.top);
+   const h=Math.max(120,r.height);
+   bar.style.top=top+'px';bar.style.bottom='auto';bar.style.height=h+'px';
+   bar.style.left=Math.max(250,r.right+14)+'px';bar.style.right='16px';
+ }
+ window.addEventListener('resize',alignCompare,{passive:true});
+ if(window.ResizeObserver){new ResizeObserver(()=>requestAnimationFrame(alignCompare)).observe(legend);new ResizeObserver(()=>requestAnimationFrame(alignCompare)).observe(bar);}
+ const compare=document.getElementById('compareMode');
+ if(compare)compare.addEventListener('click',()=>requestAnimationFrame(alignCompare));
+ const clearObserver=new MutationObserver(()=>requestAnimationFrame(alignCompare));
+ clearObserver.observe(bar,{attributes:true,attributeFilter:['class']});
+ clearObserver.observe(document.body,{attributes:true,attributeFilter:['class']});
+ document.addEventListener('click',e=>{if(e.target.closest('#clearCompare'))requestAnimationFrame(alignCompare);});
+ requestAnimationFrame(alignCompare);
+})();
+</script>
+
+
+<!-- v54: отключена синхронизация карточки отношения в режимах сравнения/маршрута; предотвращает конфликт размеров и зависания. -->
+
+</body>
+</html>
